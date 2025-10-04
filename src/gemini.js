@@ -1,3 +1,6 @@
+// import dotenv from "dotenv";
+// dotenv.config();
+// // const apikey = process.env.API_KEY;
 /**
  * Google Gemini AI Chatbot Module for ObserveVan
  * Provides conversational AI for route safety and neighborhood analysis
@@ -12,7 +15,7 @@ const GeminiAI = {
      * Check if Gemini API key is configured
      */
     isConfigured() {
-        return CONFIG.GEMINI_API_KEY && CONFIG.GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE';
+        return Boolean(CONFIG.GEMINI_API_KEY); //&& CONFIG.GEMINI_API_KEY !== apikey;
     },
     
     /**
