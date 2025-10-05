@@ -8,7 +8,7 @@
 
 const GeminiAI = {
     conversationHistory: [],
-    currentYear: '2024',
+    currentYear: '2025',
     currentCrimeType: 'all',
     currentLocation: 'all',
     
