@@ -110,6 +110,7 @@ body {
     border-radius: 8px;
     font-size: 0.95rem;
     cursor: pointer;
+    margin-bottom: 0.5rem;
 }
 
 /* Make the multi-select taller and scrollable for many options */
@@ -492,3 +493,28 @@ body {
 
 /* Optional: double-click feedback (not required) */
 #chat-resizer:active { background: rgba(255,255,255,0.1); }
+
+/* Spacing for legend section (before and after) */
+.legend-section {
+    margin: 1.5rem 0;
+}
+
+/* Legend internal styles (if needed for consistency) */
+#legend h4 {
+    margin-bottom: 0.75rem;
+    color: var(--primary-text);
+}
+
+#legend div {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+}
+
+.dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
