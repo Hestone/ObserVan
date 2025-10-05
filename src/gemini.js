@@ -95,7 +95,10 @@ const GeminiAI = {
             const data = CrimeData.getNeighborhoodData(this.currentLocation, this.currentYear, this.currentCrimeType);
             context.neighborhoodStats = {
                 ...data,
-                threatLevel: HeatmapRenderer.getThreatLevelLabel(data.incidents)
+                threatLevel: HeatmapRenderer.getThreatLevelLabel(data.incidents),
+                topHours: data.topHours || [],
+                hourCounts: data.hourCounts || {},
+                peakTimeOfDay: data.peakTimeOfDay || 'N/A'
             };
         }
         
@@ -161,41 +164,63 @@ const GeminiAI = {
         const crimeTypeLabel = context.crimeType === 'all' ? 'all crime types' : context.crimeType;
         
         let prompt = `You are ObserveVan AI, a helpful assistant for analyzing crime data in Vancouver.
-Current view: Year ${context.year}, Crime Type: ${context.crimeType}, Location: ${context.location}.`;
+Your primary goal is to answer user questions about crime and safety using the provided data.
+
+**SYSTEM DATA**
+- Current Year: ${context.year}
+- Current Crime Filter: ${crimeTypeLabel}
+- Current Location Focus: ${context.location}
+
+**LOCATION-SPECIFIC DATA**
+`;
 
         if (context.location === 'all') {
-            prompt += `\nThe user is looking at all of Vancouver. City-wide incidents: ${context.cityStats.total.toLocaleString()}.`;
+            prompt += `- City-wide Incidents: ${context.cityStats.total.toLocaleString()}\n`;
         } else {
-            prompt += `\nThe user is focused on ${context.location}, which has ${context.neighborhoodStats.incidents.toLocaleString()} incidents.`;
+            prompt += `- Neighborhood: ${context.neighborhoodStats.name}\n`;
+            prompt += `- Incidents: ${context.neighborhoodStats.incidents.toLocaleString()}\n`;
+            prompt += `- Threat Level: ${context.neighborhoodStats.threatLevel}\n`;
+            prompt += `- Peak Crime Time: ${context.neighborhoodStats.peakTimeOfDay}\n`;
+            // Add time summary when available
+            if (context.neighborhoodStats.topHours && context.neighborhoodStats.topHours.length) {
+                const top = context.neighborhoodStats.topHours.map(h=> `${h.hour}:00 (${h.count} incidents)`).join(', ');
+                prompt += `- Top 3 Peak Hours: ${top}\n`;
+            }
         }
         
         if (context.mentionedNeighborhoods.length > 0) {
-            prompt += "\n\nThe user's message mentions these neighborhoods:";
+            prompt += "\n**ADDITIONAL MENTIONED NEIGHBORHOODS DATA**\n";
             context.mentionedNeighborhoods.forEach(n => {
-                prompt += `\n- ${n.name}: ${n.incidents} incidents (${n.threatLevel}), Location: [${n.coordinates[0].toFixed(4)}, ${n.coordinates[1].toFixed(4)}]`;
+                prompt += `- ${n.name}: ${n.incidents} incidents, Threat: ${n.threatLevel}.`;
+                if (n.topHours && n.topHours.length > 0) {
+                    const top = n.topHours.map(h=> `${h.hour}:00 (${h.count})`).join(', ');
+                    prompt += ` Peak Hours: ${top}.\n`;
+                } else {
+                    prompt += ` No specific peak hour data available.\n`;
+                }
             });
         }
 
         // Add conversation history if exists
         if (this.conversationHistory.length > 0) {
-            prompt += `\n\nRecent Conversation:\n`;
+            prompt += `\n**RECENT CONVERSATION HISTORY**\n`;
             this.conversationHistory.slice(-6).forEach(entry => {
                 prompt += `${entry.role === 'user' ? 'User' : 'Assistant'}: ${entry.content}\n`;
             });
         }
 
-        prompt += `\n\nUser Question: ${userMessage}
+        prompt += `\n**USER QUESTION**\n${userMessage}\n`;
 
-Guidelines for your response:
-1. For safety questions: Provide specific information about the neighborhood(s) asked about, including crime statistics and threat level
-2. For route questions: Suggest routes that pass through safer neighborhoods, mentioning specific areas to prefer or avoid
-3. For "is it safe" questions: Give a balanced answer based on the data, including time-of-day considerations if relevant
-4. Be concise (under 200 words) but informative
-5. Always reference the actual data (incident counts, threat levels)
-6. If asked about specific times (night/day), mention that data doesn't distinguish but provide general safety advice
-7. Suggest specific alternative routes when relevant, naming actual neighborhoods
+        prompt += `\n**RESPONSE GUIDELINES**
+1. For safety questions, use the provided incident counts and threat levels.
+2. For route questions, suggest safer routes by naming specific neighborhoods to prefer or avoid.
+3. For "is it safe" questions, give a balanced answer based on the data.
+4. **Crucially, if asked about specific times (e.g., "at night", "in the morning"), you MUST use the "Peak Crime Hours" data to give a specific, data-driven answer. If that data is not available for a location, say so and provide general safety advice.**
+5. Be concise (under 200 words) but informative.
+6. Always reference the provided data in your answer.
 
-Response:`;
+**ASSISTANT RESPONSE**
+`;
 
         return prompt;
     },
