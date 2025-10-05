@@ -91,6 +91,9 @@ const ObserveVanApp = {
         } else {
             // Populate location filter from local coordinates
             this.populateLocationFilter();
+            this.populateCrimeTypeFilter();
+            // Add Bus Route Planner UI
+            this.setupBusRouteUI();
         }
         
         // Initial render
@@ -388,6 +391,26 @@ initDraggableChat() {
     },
 
     /**
+     * Populate crime type filter dropdown
+     */
+    populateCrimeTypeFilter() {
+        const crimeTypeSelect = document.getElementById('crime-type-select');
+        const crimeTypes = ['all', 'break', 'theft', 'vehicle', 'person', 'mischief', 'robbery', 'arson', 'drug', 'other'];
+        
+        // Clear existing options except the first one ("All Crime Types")
+        while (crimeTypeSelect.options.length > 1) {
+            crimeTypeSelect.remove(1);
+        }
+
+        crimeTypes.slice(1).forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+            crimeTypeSelect.appendChild(option);
+        });
+    },
+
+    /**
      * Populate location filter dropdown
      */
     populateLocationFilter() {
@@ -486,10 +509,93 @@ initDraggableChat() {
 
         // Double-click to reset to default
         resizer.addEventListener('dblclick', () => setWidth(350));
-        }
+        },
 
 
     
+    /**
+     * Setup bus route UI and handlers
+     */
+    setupBusRouteUI() {
+        // Create UI panel inside left-panel filters-nav
+        const filtersNav = document.querySelector('.filters-nav');
+        if (!filtersNav) return;
+
+        const container = document.createElement('div');
+        container.className = 'filter-group';
+        container.innerHTML = `
+            <h3>Bus Route Planner</h3>
+            <label for="route-start-loc">Start</label>
+            <select id="route-start-loc" style="width:100%; padding:6px; margin-bottom:6px;"></select>
+            <label for="route-dest-loc">Destination</label>
+            <select id="route-dest-loc" style="width:100%; padding:6px; margin-bottom:6px;"></select>
+            <label>Start hour</label>
+            <input id="route-start-hour" type="number" min="0" max="23" placeholder="7" style="width:100%; padding:6px; margin-bottom:6px;" />
+            <label>End hour</label>
+            <input id="route-end-hour" type="number" min="0" max="23" placeholder="9" style="width:100%; padding:6px; margin-bottom:6px;" />
+            <button id="compute-route" class="primary-btn">Compute Route Risk</button>
+            <div id="route-results" style="margin-top:8px;color:var(--secondary-text);"></div>
+        `;
+
+        filtersNav.appendChild(container);
+
+        // Populate start and destination dropdowns with neighborhood names
+        const startSelect = document.getElementById('route-start-loc');
+        const destSelect = document.getElementById('route-dest-loc');
+        const neighborhoods = Object.keys(CrimeData.neighborhoodCoordinates).sort();
+
+        neighborhoods.forEach(name => {
+            const option1 = document.createElement('option');
+            option1.value = name;
+            option1.textContent = name;
+            startSelect.appendChild(option1);
+
+            const option2 = document.createElement('option');
+            option2.value = name;
+            option2.textContent = name;
+            destSelect.appendChild(option2);
+        });
+
+        // Set default selections
+        if (neighborhoods.length > 1) {
+            startSelect.value = neighborhoods[0];
+            destSelect.value = neighborhoods[1];
+        }
+
+        document.getElementById('compute-route').addEventListener('click', async () => {
+            const startVal = document.getElementById('route-start-loc').value;
+            const destVal = document.getElementById('route-dest-loc').value;
+            const sh = parseInt(document.getElementById('route-start-hour').value,10);
+            const eh = parseInt(document.getElementById('route-end-hour').value,10);
+            
+            const startCoords = CrimeData.neighborhoodCoordinates[startVal];
+            const destCoords = CrimeData.neighborhoodCoordinates[destVal];
+
+            if (!startCoords || !destCoords) {
+                document.getElementById('route-results').textContent = 'Please select valid start and destination locations.';
+                return;
+            }
+
+            const start = { lat: startCoords[0], lng: startCoords[1] };
+            const dest = { lat: destCoords[0], lng: destCoords[1] };
+
+            document.getElementById('route-results').textContent = 'Computing...';
+            const res = await RoutePlanner.planRoute(start, dest, { year: this.currentYear, crimeType: this.currentCrimeType, startHour: Number.isFinite(sh)?sh:null, endHour: Number.isFinite(eh)?eh:null });
+
+            const resultsDiv = document.getElementById('route-results');
+            resultsDiv.innerHTML = `
+                <div>Total incidents along route: <strong>${res.total}</strong></div>
+                <div>Risk score: <strong>${res.score}</strong></div>
+                <div>Worst areas on route: ${res.worst.map(w=> `${w.name} (${w.count})`).join(', ')}</div>
+            `;
+
+            if (res.alternatives && res.alternatives.length) {
+                resultsDiv.innerHTML += `<div style="margin-top:8px;">Alternative suggestion: go via waypoint at (${res.alternatives[0].waypoint.lat.toFixed(4)}, ${res.alternatives[0].waypoint.lng.toFixed(4)}) — expected incidents: ${res.alternatives[0].total}</div>`;
+            }
+        });
+    },
+
+    // ...existing code...
 };
 
 

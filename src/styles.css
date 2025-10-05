@@ -48,6 +48,7 @@ body {
 /* Left Panel: Filters & Header */
 .left-panel {
     padding: 1.5rem;
+    overflow-y: auto;
 }
 
 .app-header h1 {

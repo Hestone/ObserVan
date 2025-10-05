@@ -43,17 +43,6 @@ const CrimeData = {
         
         await Promise.all(dataPromises);
 
-        // If no data was loaded (CSV unreachable), populate with sample data so UI still works
-        const hasData = Object.keys(this.crimeDataByYear).some(y => {
-            const d = this.crimeDataByYear[String(y)];
-            return d && Object.keys(d).length > 0;
-        });
-
-        if (!hasData) {
-            console.warn('No CSV data loaded — populating with embedded sample data for demo purposes.');
-            this.loadSampleData();
-        }
-
         console.log('All crime data loaded successfully.');
     },
 
@@ -63,26 +52,27 @@ const CrimeData = {
      * @returns {Promise<void>}
      */
     async loadDataForYear(year) {
-        // Use absolute path from server root to avoid path issues when serving /src
-        const filePath = `/docs/data/crimedata_csv_AllNeighbourhoods_${year}/crimedata_csv_AllNeighbourhoods_${year}.csv`;
-
-        try {
-            console.log(`Fetching CSV for ${year}: ${filePath}`);
-            const res = await fetch(filePath);
-            if (!res.ok) {
-                console.warn(`CSV not found for ${year} (status ${res.status})`);
-                this.crimeDataByYear[String(year)] = {};
-                return;
-            }
-
-            const text = await res.text();
-            const results = Papa.parse(text, { header: true, skipEmptyLines: true });
-            console.log(`Parsed ${results.data.length} rows for ${year}`);
-            this.processData(year, results.data);
-        } catch (err) {
-            console.error(`Error loading data for ${year}:`, err);
-            this.crimeDataByYear[String(year)] = {};
-        }
+        // Path is relative to the `src` directory where index.html is served.
+        const filePath = `../docs/data/crimedata_csv_AllNeighbourhoods_${year}/crimedata_csv_AllNeighbourhoods_${year}.csv`;
+        console.log(`Attempting to load data for ${year} from: ${filePath}`);
+        
+        return new Promise((resolve, reject) => {
+            Papa.parse(filePath, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    console.log(`Successfully parsed data for ${year}. Found ${results.data.length} records.`);
+                    this.processData(year, results.data);
+                    resolve();
+                },
+                error: (error) => {
+                    console.error(`Error loading or parsing data for ${year}:`, error);
+                    this.crimeDataByYear[String(year)] = {}; 
+                    resolve(); // Resolve anyway to not block the app
+                }
+            });
+        });
     },
 
     /**
@@ -99,13 +89,17 @@ const CrimeData = {
             if (!data[neighborhood]) {
                 data[neighborhood] = {
                     all: 0,
-                    commercial: 0,
-                    residential: 0,
+                    break: 0,
                     theft: 0,
                     vehicle: 0,
                     person: 0,
                     mischief: 0,
-                    other: 0
+                    robbery: 0,
+                    arson: 0,
+                    drug: 0,
+                    other: 0,
+                    hourCounts: {},    // counts per hour
+                    topHours: []       // filled after processing
                 };
             }
 
@@ -114,14 +108,75 @@ const CrimeData = {
 
             // Categorize and increment specific type
             const type = this.categorizeCrime(record.TYPE);
-            if (type) {
+            
+            // ensure key exists and increment
+            if (data[neighborhood][type] !== undefined) {
                 data[neighborhood][type]++;
             } else {
-                // If we don't recognize the type, count it as other
                 data[neighborhood].other++;
             }
+
+            // Record hour information if available (HOUR field in CSV)
+            const hourRaw = record.HOUR ?? record.Hour ?? record.hour;
+            const hour = hourRaw !== undefined ? parseInt(hourRaw, 10) : NaN;
+            if (!Number.isNaN(hour) && hour >= 0 && hour <= 23) {
+                data[neighborhood].hourCounts[hour] = (data[neighborhood].hourCounts[hour] || 0) + 1;
+            }
+        }
+
+        // compute topHours and peakTimeOfDay for each neighborhood
+        for (const nb in data) {
+            const counts = data[nb].hourCounts || {};
+            data[nb].topHours = Object.keys(counts)
+                .map(h => ({ hour: Number(h), count: counts[h] }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 3);
+            data[nb].peakTimeOfDay = this.getPeakTimeOfDay(counts);
         }
         this.crimeDataByYear[String(year)] = data;
+        console.log(`Finished processing ${year}. Found ${Object.keys(data).length} neighborhoods.`);
+    },
+
+    /**
+     * Analyzes hourCounts to determine the most common time of day for incidents.
+     * @param {Object} hourCounts - An object with hours (0-23) as keys and incident counts as values.
+     * @returns {string} The name of the peak time slot (e.g., "Afternoon", "Late Night").
+     */
+    getPeakTimeOfDay(hourCounts) {
+        if (!hourCounts || Object.keys(hourCounts).length === 0) {
+            return 'N/A';
+        }
+
+        const timeSlots = {
+            'Late Night': { hours: [0, 1, 2, 3], count: 0 },      // 12am - 4am
+            'Early Morning': { hours: [4, 5, 6, 7], count: 0 },   // 4am - 8am
+            'Morning': { hours: [8, 9, 10, 11], count: 0 },      // 8am - 12pm
+            'Afternoon': { hours: [12, 13, 14, 15, 16], count: 0 },// 12pm - 5pm
+            'Evening': { hours: [17, 18, 19, 20], count: 0 },    // 5pm - 9pm
+            'Night': { hours: [21, 22, 23], count: 0 }           // 9pm - 12am
+        };
+
+        for (const hour in hourCounts) {
+            const h = parseInt(hour, 10);
+            const count = hourCounts[hour];
+            for (const slotName in timeSlots) {
+                if (timeSlots[slotName].hours.includes(h)) {
+                    timeSlots[slotName].count += count;
+                }
+            }
+        }
+
+        let peakSlot = 'N/A';
+        let maxCount = 0;
+
+        for (const slotName in timeSlots) {
+            if (timeSlots[slotName].count > maxCount) {
+                maxCount = timeSlots[slotName].count;
+                peakSlot = slotName;
+            }
+        }
+
+        return peakSlot;
     },
 
     /**
@@ -131,32 +186,25 @@ const CrimeData = {
      */
     categorizeCrime(vpdType) {
         if (!vpdType) return 'other';
-        
-        // Break and Enter cases
-        if (vpdType.startsWith('Break and Enter Commercial')) {
-            return 'commercial';
-        }
-        if (vpdType.startsWith('Break and Enter Residential')) {
-            return 'residential';
-        }
-        
-        // Theft cases
-        if (vpdType.startsWith('Theft of Vehicle') || vpdType.startsWith('Theft of Bicycle') || vpdType === 'Other Theft') {
-            return 'theft';
-        }
-        if (vpdType.startsWith('Theft from Vehicle')) {
-            return 'vehicle';
-        }
-        
-        // Violence against person
-        if (vpdType.startsWith('Homicide') || vpdType.startsWith('Assault') || vpdType.includes('Violence')) {
-            return 'person';
-        }
 
-        // Mischief
-        if (vpdType.includes('Mischief')) {
-            return 'mischief';
-        }
+        const t = String(vpdType).trim().toLowerCase();
+
+        // More specific categories first
+        if (t === 'robbery') return 'robbery';
+        if (t === 'arson') return 'arson';
+        if (t.startsWith('break and enter')) return 'break';
+        if (t === 'vehicle collision or pedestrian struck (with injury)') return 'person';
+        if (t === 'vehicle collision or pedestrian struck (with fatality)') return 'person';
+        
+        // Broader categories
+        if (t.includes('assault')) return 'person';
+        if (t.includes('offence against a person')) return 'person';
+        if (t.includes('theft of vehicle')) return 'vehicle';
+        if (t.includes('theft from vehicle')) return 'vehicle';
+        if (t.includes('theft of bicycle')) return 'theft';
+        if (t === 'other theft') return 'theft';
+        if (t.includes('mischief')) return 'mischief';
+        if (t.includes('drug')) return 'drug';
 
         return 'other';
     },
@@ -168,7 +216,7 @@ const CrimeData = {
         const yearData = this.crimeDataByYear[String(year)];
         if (!yearData || !yearData[neighborhoodName]) {
             // Return a zero-filled object if no data is found
-            return { name: neighborhoodName, year, incidents: 0, crimeType, all: 0, theft: 0, break: 0, vehicle: 0, person: 0 };
+            return { name: neighborhoodName, year, incidents: 0, crimeType, all: 0, theft: 0, break: 0, vehicle: 0, person: 0, hourCounts: {}, topHours: [], peakTimeOfDay: 'N/A' };
         }
         
         const neighborhoodData = yearData[neighborhoodName];
@@ -176,8 +224,12 @@ const CrimeData = {
             name: neighborhoodName,
             year: year,
             // Set 'incidents' to the selected crime type's count
-            incidents: neighborhoodData[crimeType] || 0,
+            incidents: crimeType === 'all' ? (neighborhoodData.all || 0) : (neighborhoodData[crimeType] || 0),
             crimeType: crimeType,
+            // Include hour information
+            hourCounts: neighborhoodData.hourCounts || {},
+            topHours: neighborhoodData.topHours || [],
+            peakTimeOfDay: neighborhoodData.peakTimeOfDay || 'N/A',
             // Always include the counts for all categories
             ...neighborhoodData
         };
@@ -222,60 +274,7 @@ const CrimeData = {
         return neighborhoods
             .sort((a, b) => b.incidents - a.incidents)
             .slice(0, count);
-    },
-
-    /**
-     * Populate crimeDataByYear with sample data (fallback when CSVs not available)
-     */
-    loadSampleData() {
-        const sample = {
-            'Central Business District': { all: 1250, theft: 520, break: 180, vehicle: 380, person: 170 },
-            'West End': { all: 680, theft: 310, break: 95, vehicle: 215, person: 60 },
-            'Strathcona': { all: 890, theft: 420, break: 135, vehicle: 265, person: 70 },
-            'Grandview-Woodland': { all: 520, theft: 240, break: 85, vehicle: 155, person: 40 },
-            'Mount Pleasant': { all: 440, theft: 210, break: 70, vehicle: 130, person: 30 },
-            'Fairview': { all: 380, theft: 175, break: 60, vehicle: 120, person: 25 },
-            'Kitsilano': { all: 340, theft: 160, break: 55, vehicle: 105, person: 20 },
-            'Hastings-Sunrise': { all: 460, theft: 215, break: 75, vehicle: 140, person: 30 },
-            'Renfrew-Collingwood': { all: 390, theft: 180, break: 65, vehicle: 120, person: 25 },
-            'Kensington-Cedar Cottage': { all: 410, theft: 190, break: 68, vehicle: 125, person: 27 },
-            'Riley Park': { all: 280, theft: 130, break: 45, vehicle: 85, person: 20 },
-            'Sunset': { all: 310, theft: 145, break: 50, vehicle: 95, person: 20 },
-            'Victoria-Fraserview': { all: 260, theft: 120, break: 42, vehicle: 80, person: 18 },
-            'Killarney': { all: 220, theft: 105, break: 35, vehicle: 65, person: 15 },
-            'Oakridge': { all: 190, theft: 90, break: 30, vehicle: 58, person: 12 },
-            'Marpole': { all: 330, theft: 155, break: 53, vehicle: 100, person: 22 },
-            'Dunbar-Southlands': { all: 165, theft: 80, break: 27, vehicle: 48, person: 10 },
-            'Kerrisdale': { all: 145, theft: 70, break: 23, vehicle: 42, person: 10 },
-            'Arbutus Ridge': { all: 135, theft: 65, break: 22, vehicle: 38, person: 10 },
-            'Shaughnessy': { all: 120, theft: 58, break: 20, vehicle: 34, person: 8 },
-            'West Point Grey': { all: 155, theft: 75, break: 25, vehicle: 45, person: 10 },
-            'South Cambie': { all: 175, theft: 85, break: 28, vehicle: 52, person: 10 },
-            'Stanley Park': { all: 85, theft: 45, break: 12, vehicle: 22, person: 6 },
-            'Musqueam': { all: 45, theft: 22, break: 8, vehicle: 12, person: 3 }
-        };
-
-        // Assign sample numbers to multiple years (2020-2025)
-        const years = ['2020','2021','2022','2023','2024','2025'];
-        years.forEach(year => {
-            const data = {};
-            for (const name in sample) {
-                const s = sample[name];
-                data[name] = {
-                    all: s.all,
-                    theft: s.theft,
-                    break: s.break,
-                    vehicle: s.vehicle,
-                    person: s.person,
-                    commercial: 0,
-                    residential: 0,
-                    mischief: 0,
-                    other: 0
-                };
-            }
-            this.crimeDataByYear[year] = data;
-        });
-    },
+    }
 };
 
 // Initialize the CrimeData module (uncomment in production)
