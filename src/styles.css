@@ -30,7 +30,7 @@ body {
 /* Main App Layout */
 .app-container {
     display: grid;
-    grid-template-columns: 300px 1fr 350px;
+    grid-template-columns: 300px 1fr 6px var(--chat-width); /* left | main | splitter | chat */
     height: 100vh;
     gap: 1rem;
     padding: 1rem;
@@ -309,3 +309,87 @@ body {
         height: calc(100vh - 2rem);
     }
 }
+
+/* Chat header controls */
+.chatbot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: move; /* header acts as drag handle */
+}
+
+.chat-controls {
+  display: flex;
+  gap: 6px;
+}
+.chat-controls button {
+  background: var(--tertiary-bg);
+  color: var(--primary-text);
+  border: 1px solid var(--tertiary-bg);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.chat-controls button:hover {
+  border-color: var(--accent-color);
+}
+
+/* Floating (undocked) chat */
+.right-panel.chatbot-container.floating {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 360px;
+  height: 520px;
+  z-index: 1000;
+  resize: both;             /* optional: let users resize */
+  overflow: hidden;
+}
+
+.right-panel.chatbot-container.minimized {
+  height: 52px !important;
+}
+.right-panel.chatbot-container.minimized .chat-messages,
+.right-panel.chatbot-container.minimized .chat-input-area {
+  display: none;
+}
+
+
+.right-panel.chatbot-container.dragging {
+  opacity: 0.9;
+  user-select: none;
+}
+
+/* Off-canvas hide when docked */
+.right-panel.chatbot-container.offcanvas {
+  transform: translateX(120%);
+  transition: transform 0.25s ease;
+}
+
+:root { --chat-width: 350px; }        /* default chat width */
+
+/* Vertical splitter between main and chat */
+#chat-resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;            /* keep it subtle */
+  height: 100%;
+}
+#chat-resizer:hover {
+  background: rgba(255,255,255,0.06);
+}
+.app-container.resizing * {
+  user-select: none;
+  cursor: col-resize !important;
+}
+
+/* When chat is hidden (width = 0px), keep splitter visible */
+.app-container.chat-hidden {
+  --chat-width: 0px;
+}
+
+/* Optional: double-click feedback (not required) */
+#chat-resizer:active { background: rgba(255,255,255,0.1); }
+
