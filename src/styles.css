@@ -48,7 +48,6 @@ body {
 /* Left Panel: Filters & Header */
 .left-panel {
     padding: 1.5rem;
-    overflow-y: auto;
 }
 
 .app-header h1 {
@@ -94,6 +93,107 @@ body {
 }
 
 .filter-group select:hover {
+    border-color: var(--accent-color);
+}
+
+/* Filters inside the left panel (catch selects not wrapped in .filter-group) */
+.filters-nav select,
+.filters-nav input[type="date"],
+#crime-type-select,
+#location-select {
+    width: 100%;
+    padding: 0.65rem;
+    background-color: var(--tertiary-bg);
+    color: var(--primary-text);
+    border: 1px solid #3a3f47;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+/* Make the multi-select taller and scrollable for many options */
+#crime-type-select {
+    min-height: 6rem;
+    max-height: 12rem;
+    overflow-y: auto;
+}
+
+/* Improve readability for native options */
+#crime-type-select option,
+#location-select option,
+.filters-nav select option {
+    background-color: var(--secondary-bg);
+    color: var(--primary-text);
+    padding: 0.5rem 0.75rem;
+}
+
+/* Ensure native select dropdowns look similar to the neighbourhood select */
+.filters-nav select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+
+/* Choices.js overrides to match dark theme and ensure contrast */
+.choices__inner {
+    background-color: var(--tertiary-bg) !important;
+    border: 1px solid #3a3f47 !important;
+    color: var(--primary-text) !important;
+    border-radius: 8px !important;
+}
+
+/* Hide the white editable input area inside Choices (prevents the small white box) */
+.choices__input {
+    background: transparent !important;
+    color: var(--primary-text) !important;
+    caret-color: var(--primary-text) !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    min-width: 2px !important; /* keep layout stable */
+}
+
+/* If there are no selected items, make the placeholder area match the background */
+.choices__inner.is-empty .choices__list--single {
+    color: var(--secondary-text) !important;
+}
+
+.choices__list--dropdown .choices__item {
+    color: var(--primary-text) !important;
+    background: var(--secondary-bg) !important;
+    padding: 0.55rem 0.8rem !important;
+    border-bottom: 1px solid rgba(255,255,255,0.03) !important;
+}
+
+.choices__list--multiple .choices__item {
+    background: rgba(255,255,255,0.04) !important;
+    color: var(--primary-text) !important;
+    border: 1px solid rgba(255,255,255,0.04) !important;
+    border-radius: 8px !important;
+}
+
+.choices__item--selectable {
+    cursor: pointer;
+}
+.choices__item--selectable:hover,
+.choices__list--dropdown .choices__item--selectable.is-highlighted {
+    background: var(--tertiary-bg) !important;
+    color: var(--primary-text) !important;
+}
+
+/* Make the drop-down container resemble the left-panel selects */
+.choices__list--dropdown {
+    border: 1px solid #3a3f47 !important;
+    box-shadow: var(--shadow) !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    z-index: 1200 !important;
+}
+
+/* Ensure focus states are visible */
+.filters-nav select:focus, .filters-nav input[type="date"]:focus, .choices__inner:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(74,144,226,0.14);
     border-color: var(--accent-color);
 }
 

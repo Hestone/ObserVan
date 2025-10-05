@@ -41,15 +41,8 @@ const ObserveVanApp = {
         
         // Populate location and type filters (server-driven when available)
         if (this.serverMode && this.serverMeta) {
-            // populate years if provided
-            const yearSelect = document.getElementById('year-select');
-            if (this.serverMeta.years && yearSelect) {
-                // clear and repopulate keeping UI structure
-                // keep existing options but try to select default
-                if (Array.isArray(this.serverMeta.years)) {
-                    // optional: replace year options
-                }
-            }
+            // server provided metadata may include supported years; we currently don't render a separate year selector
+            // but the information could be used for validation or future UX.
 
             // Populate crime types from server if endpoint exists
             try {
@@ -57,14 +50,23 @@ const ObserveVanApp = {
                 if (typesRes.ok) {
                     const types = await typesRes.json();
                     const crimeTypeSelect = document.getElementById('crime-type-select');
-                    // keep "All Crime Types" option first
-                    crimeTypeSelect.innerHTML = '<option value="all">All Crime Types</option>';
+                    // Do NOT include a visible "All Crime Types" option. Leave no-selection to mean 'all'.
+                    crimeTypeSelect.innerHTML = '';
                     types.forEach(t => {
                         const opt = document.createElement('option');
                         opt.value = t;
                         opt.textContent = t;
                         crimeTypeSelect.appendChild(opt);
                     });
+                    // If Choices.js is active, try to refresh its choices to reflect server-provided types
+                    try {
+                        if (window.__choices_crime_type && typeof window.__choices_crime_type.setChoices === 'function') {
+                            const choices = types.map(v => ({ value: v, label: v }));
+                            window.__choices_crime_type.setChoices(choices, 'value', 'label', true);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to update Choices.js with server types', e);
+                    }
                 }
             } catch (e) {
                 console.warn('Failed to populate types from server', e);
@@ -91,9 +93,8 @@ const ObserveVanApp = {
         } else {
             // Populate location filter from local coordinates
             this.populateLocationFilter();
-            this.populateCrimeTypeFilter();
-            // Add Bus Route Planner UI
-            this.setupBusRouteUI();
+            // Populate crime type filter from loaded local data
+            this.populateCrimeTypeFilterFromData();
         }
         
         // Initial render
@@ -117,20 +118,61 @@ const ObserveVanApp = {
             GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
         });
 
-        // Year selector
-        const yearSelect = document.getElementById('year-select');
-        yearSelect.value = this.currentYear;
-        yearSelect.addEventListener('change', (e) => {
-            this.currentYear = e.target.value;
+        // No separate year selector anymore; the calendar controls define the date range.
+        // Initialize currentYear from config (fallback) — may be overwritten from start_date below.
+        this.currentYear = this.currentYear || CONFIG.DEFAULT_YEAR;
+
+        // Date range inputs (new calendar pickers)
+        const startDateInput = document.getElementById('start_date');
+        const endDateInput = document.getElementById('end_date');
+
+        // Helper to set sensible defaults when application initializes
+        const setDefaultDatesForYear = (year) => {
+            // default to full calendar year
+            const start = `${year}-01-01`;
+            const end = `${year}-12-31`;
+            if (startDateInput && !startDateInput.value) startDateInput.value = start;
+            if (endDateInput && !endDateInput.value) endDateInput.value = end;
+        };
+
+        // initialize defaults based on current year
+        setDefaultDatesForYear(this.currentYear);
+
+        // When either date changes, re-render visualization. Keep currentYear in sync with start date's year
+        const onDateRangeChange = () => {
+            // If start date exists, update currentYear to its year part for compatibility
+            if (startDateInput && startDateInput.value) {
+                const y = new Date(startDateInput.value).getFullYear();
+                this.currentYear = String(y);
+            }
+
+            // For now the visualization layer only accepts a single year; keep behavior consistent
             this.updateVisualization();
             GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
-        });
+        };
+
+        if (startDateInput) startDateInput.addEventListener('change', onDateRangeChange);
+        if (endDateInput) endDateInput.addEventListener('change', onDateRangeChange);
 
         // Crime type selector
         const crimeTypeSelect = document.getElementById('crime-type-select');
-        crimeTypeSelect.value = this.currentCrimeType;
-        crimeTypeSelect.addEventListener('change', (e) => {
-            this.currentCrimeType = e.target.value;
+        // Helper to read the crime type selection and return a single value for the renderer.
+        // If no option is selected, return 'all' (meaning: include all types).
+        this.getSelectedCrimeType = () => {
+            const sel = document.getElementById('crime-type-select');
+            if (!sel) return 'all';
+            const selected = Array.from(sel.selectedOptions || []).map(o => o.value).filter(Boolean);
+            if (selected.length === 0) return 'all';
+            if (selected.includes('all')) return 'all';
+            // If multiple types selected, we default to the first for compatibility with single-year renderer
+            return selected[0];
+        };
+
+        // Set initial crime type
+        this.currentCrimeType = this.getSelectedCrimeType();
+
+        if (crimeTypeSelect) crimeTypeSelect.addEventListener('change', (e) => {
+            this.currentCrimeType = this.getSelectedCrimeType();
             this.updateVisualization();
             GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
         });
@@ -281,26 +323,6 @@ const ObserveVanApp = {
     },
 
     /**
-     * Populate crime type filter dropdown
-     */
-    populateCrimeTypeFilter() {
-        const crimeTypeSelect = document.getElementById('crime-type-select');
-        const crimeTypes = ['all', 'break', 'theft', 'vehicle', 'person', 'mischief', 'robbery', 'arson', 'drug', 'other'];
-        
-        // Clear existing options except the first one ("All Crime Types")
-        while (crimeTypeSelect.options.length > 1) {
-            crimeTypeSelect.remove(1);
-        }
-
-        crimeTypes.slice(1).forEach(type => {
-            const option = document.createElement('option');
-            option.value = type;
-            option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
-            crimeTypeSelect.appendChild(option);
-        });
-    },
-
-    /**
      * Populate location filter dropdown
      */
     populateLocationFilter() {
@@ -313,6 +335,92 @@ const ObserveVanApp = {
             option.textContent = name;
             locationSelect.appendChild(option);
         });
+    },
+
+    /**
+     * Populate the crime-type select using categories present in CrimeData.
+     * This works when running in local/offline mode (CSV parsed client-side).
+     */
+    populateCrimeTypeFilterFromData() {
+        const select = document.getElementById('crime-type-select');
+        if (!select) return;
+
+        // Collect keys from the aggregated data (e.g., theft, break, vehicle, person, etc.)
+        const types = new Set();
+        for (const year in CrimeData.crimeDataByYear) {
+            const yearData = CrimeData.crimeDataByYear[year] || {};
+            for (const neigh in yearData) {
+                const obj = yearData[neigh] || {};
+                Object.keys(obj).forEach(k => types.add(k));
+            }
+        }
+
+        // Convert to sorted array (exclude any 'all' key if present)
+        const ordered = Array.from(types).filter(t => t && t !== 'all').sort();
+
+        // Map to human-friendly labels (basic mapping)
+        const niceLabel = (key) => {
+            if (key === 'all') return 'All Crime Types';
+            if (key === 'break') return 'Break and Enter';
+            if (key === 'person') return 'Violence / Person';
+            if (key === 'vehicle') return 'Vehicle-related';
+            if (key === 'theft') return 'Theft';
+            if (key === 'commercial') return 'Break & Enter (Commercial)';
+            if (key === 'residential') return 'Break & Enter (Residential)';
+            if (key === 'mischief') return 'Mischief';
+            if (key === 'other') return 'Other';
+            return key.charAt(0).toUpperCase() + key.slice(1);
+        };
+
+
+        // Build choices array (do NOT include a visible 'all' option)
+        const choices = ordered.map(v => ({ value: v, label: niceLabel(v) }));
+
+        // Replace select options (no 'all' option shown)
+        select.innerHTML = '';
+        choices.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.value;
+            opt.textContent = c.label;
+            select.appendChild(opt);
+        });
+
+        // If Choices.js was initialized, update it
+        try {
+            if (window.__choices_crime_type && typeof window.__choices_crime_type.setChoices === 'function') {
+                // setChoices expects an array of objects
+                window.__choices_crime_type.setChoices(choices, 'value', 'label', true);
+            }
+        } catch (e) {
+            console.warn('Failed to update Choices.js for crime-type-select', e);
+        }
+
+        // Keep the current selection if present and ensure UI + app state are in sync.
+        try {
+            const desired = this.currentCrimeType || 'all';
+            // If the currentCrimeType corresponds to a real option, preselect it. Otherwise, leave nothing selected
+            Array.from(select.options).forEach(opt => {
+                opt.selected = (opt.value === desired);
+            });
+
+            // If Choices.js is present, try to set its active choice(s) as well.
+            try {
+                if (window.__choices_crime_type && typeof window.__choices_crime_type.setChoiceByValue === 'function') {
+                    // Only set if desired matches an actual option (Choices will ignore unknown values)
+                    window.__choices_crime_type.setChoiceByValue(desired);
+                } else if (window.__choices_crime_type && typeof window.__choices_crime_type.setValue === 'function') {
+                    window.__choices_crime_type.setValue(true, [{ value: desired, label: desired }]);
+                }
+            } catch (innerErr) {
+                // Not critical — continue
+            }
+
+            // If nothing is selected, we intentionally do NOT dispatch a change event here.
+            // The app's logic treats an empty selection as 'all' (see getSelectedCrimeType()),
+            // so leaving no selection visually hides the 'All Crime Types' option while preserving default behavior.
+        } catch (e) {
+            console.warn('Failed to set default crime-type selection', e);
+        }
     },
 
     /**
@@ -333,91 +441,7 @@ const ObserveVanApp = {
         // Restore button
         analyzeBtn.disabled = false;
         analyzeBtn.innerHTML = originalText;
-    },
-
-    /**
-     * Setup bus route UI and handlers
-     */
-    setupBusRouteUI() {
-        // Create UI panel inside left-panel filters-nav
-        const filtersNav = document.querySelector('.filters-nav');
-        if (!filtersNav) return;
-
-        const container = document.createElement('div');
-        container.className = 'filter-group';
-        container.innerHTML = `
-            <h3>Bus Route Planner</h3>
-            <label for="route-start-loc">Start</label>
-            <select id="route-start-loc" style="width:100%; padding:6px; margin-bottom:6px;"></select>
-            <label for="route-dest-loc">Destination</label>
-            <select id="route-dest-loc" style="width:100%; padding:6px; margin-bottom:6px;"></select>
-            <label>Start hour</label>
-            <input id="route-start-hour" type="number" min="0" max="23" placeholder="7" style="width:100%; padding:6px; margin-bottom:6px;" />
-            <label>End hour</label>
-            <input id="route-end-hour" type="number" min="0" max="23" placeholder="9" style="width:100%; padding:6px; margin-bottom:6px;" />
-            <button id="compute-route" class="primary-btn">Compute Route Risk</button>
-            <div id="route-results" style="margin-top:8px;color:var(--secondary-text);"></div>
-        `;
-
-        filtersNav.appendChild(container);
-
-        // Populate start and destination dropdowns with neighborhood names
-        const startSelect = document.getElementById('route-start-loc');
-        const destSelect = document.getElementById('route-dest-loc');
-        const neighborhoods = Object.keys(CrimeData.neighborhoodCoordinates).sort();
-
-        neighborhoods.forEach(name => {
-            const option1 = document.createElement('option');
-            option1.value = name;
-            option1.textContent = name;
-            startSelect.appendChild(option1);
-
-            const option2 = document.createElement('option');
-            option2.value = name;
-            option2.textContent = name;
-            destSelect.appendChild(option2);
-        });
-
-        // Set default selections
-        if (neighborhoods.length > 1) {
-            startSelect.value = neighborhoods[0];
-            destSelect.value = neighborhoods[1];
-        }
-
-        document.getElementById('compute-route').addEventListener('click', async () => {
-            const startVal = document.getElementById('route-start-loc').value;
-            const destVal = document.getElementById('route-dest-loc').value;
-            const sh = parseInt(document.getElementById('route-start-hour').value,10);
-            const eh = parseInt(document.getElementById('route-end-hour').value,10);
-            
-            const startCoords = CrimeData.neighborhoodCoordinates[startVal];
-            const destCoords = CrimeData.neighborhoodCoordinates[destVal];
-
-            if (!startCoords || !destCoords) {
-                document.getElementById('route-results').textContent = 'Please select valid start and destination locations.';
-                return;
-            }
-
-            const start = { lat: startCoords[0], lng: startCoords[1] };
-            const dest = { lat: destCoords[0], lng: destCoords[1] };
-
-            document.getElementById('route-results').textContent = 'Computing...';
-            const res = await RoutePlanner.planRoute(start, dest, { year: this.currentYear, crimeType: this.currentCrimeType, startHour: Number.isFinite(sh)?sh:null, endHour: Number.isFinite(eh)?eh:null });
-
-            const resultsDiv = document.getElementById('route-results');
-            resultsDiv.innerHTML = `
-                <div>Total incidents along route: <strong>${res.total}</strong></div>
-                <div>Risk score: <strong>${res.score}</strong></div>
-                <div>Worst areas on route: ${res.worst.map(w=> `${w.name} (${w.count})`).join(', ')}</div>
-            `;
-
-            if (res.alternatives && res.alternatives.length) {
-                resultsDiv.innerHTML += `<div style="margin-top:8px;">Alternative suggestion: go via waypoint at (${res.alternatives[0].waypoint.lat.toFixed(4)}, ${res.alternatives[0].waypoint.lng.toFixed(4)}) — expected incidents: ${res.alternatives[0].total}</div>`;
-            }
-        });
-    },
-
-    // ...existing code...
+    }
 };
 
 // Initialize the application after the DOM is fully loaded
