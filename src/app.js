@@ -175,6 +175,32 @@ const ObserveVanApp = {
             GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
         });
 
+        // Reset filters button
+        const resetBtn = document.getElementById('reset-filters');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                // Reset dates to full current year
+                const year = this.currentYear;
+                if (startDateInput) startDateInput.value = `${year}-01-01`;
+                if (endDateInput) endDateInput.value = `${year}-12-31`;
+                // Reset crime type: deselect all (means 'all' crimes)
+                if (crimeTypeSelect) {
+                    Array.from(crimeTypeSelect.options).forEach(opt => opt.selected = false);
+                }
+                if (window.__choices_crime_type && typeof window.__choices_crime_type.removeActiveItems === 'function') {
+                    window.__choices_crime_type.removeActiveItems();
+                }
+                this.currentCrimeType = 'all';
+                // Reset location
+                if (locationSelect) locationSelect.value = 'all';
+                this.currentLocation = 'all';
+                // Update visualization and AI context
+                this.updateVisualization();
+                GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
+                console.log('Filters reset to defaults');
+            });
+        }
+
         // AI Analysis button (quick analysis)
         const analyzeBtn = document.getElementById('analyze-btn');
         analyzeBtn.addEventListener('click', () => {
@@ -461,8 +487,10 @@ const ObserveVanApp = {
             }
         }
 
-        // Convert to sorted array (exclude any 'all' key if present)
-        const ordered = Array.from(types).filter(t => t && t !== 'all').sort();
+        // Convert to sorted array (exclude 'all', and derived fields like hourCounts, topHours, peakTimeOfDay)
+        const ordered = Array.from(types)
+            .filter(t => t && t !== 'all' && t !== 'hourCounts' && t !== 'topHours' && t !== 'peakTimeOfDay')
+            .sort();
 
         // Map to human-friendly labels (basic mapping)
         const niceLabel = (key) => {
