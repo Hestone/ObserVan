@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vancouver Crime Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div id="sidebar">
+      <h2>Filters</h2>
+  <label>Date from (month / year)</label>
+  <div style="display:flex; gap:8px;"><select id="start_month"></select><select id="start_year"></select></div>
+  <label>Date to (month / year)</label>
+  <div style="display:flex; gap:8px;"><select id="end_month"></select><select id="end_year"></select></div>
+  <label>Crime type</label>
+  <select id="type" multiple size="6"></select>
+      <label>Neighbourhood</label>
+      <select id="neighbourhood"><option value="">(all)</option></select>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button id="apply">Apply</button>
+        <button id="reset">Reset</button>
+      </div>
+      <div style="margin-top:12px;">
+        <a href="/crime_map.html" target="_blank">Open simple map (static)</a>
+      </div>
+      <hr />
+      <div id="legend">
+        <h4>Legend</h4>
+        <div><span class="dot" style="background:#2b83ba"></span> Low count</div>
+        <div><span class="dot" style="background:#ffffbf"></span> Medium</div>
+        <div><span class="dot" style="background:#fdae61"></span> High</div>
+        <div><span class="dot" style="background:#d7191c"></span> Very high</div>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+    <script src="/static/map.js"></script>
+  </body>
+  </html>

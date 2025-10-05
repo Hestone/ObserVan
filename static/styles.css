@@ -1,0 +1,15 @@
+#html, body { height: 100%; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
+#map { position: absolute; left: 300px; top: 0; right: 0; bottom: 0; }
+#sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 300px; padding: 16px; background: #fff; box-shadow: 2px 0 8px rgba(0,0,0,0.08); overflow-y: auto; z-index: 400; }
+#sidebar h2 { margin-top: 0; }
+#sidebar label { display:block; margin-top:12px; font-size: 0.9rem; }
+#sidebar input, #sidebar select { width: 100%; padding: 6px 8px; margin-top:6px; box-sizing: border-box; }
+#sidebar button { margin-top: 12px; padding: 8px 10px; width: 48%; }
+#legend .dot { display:inline-block; width:14px; height:14px; border-radius:7px; margin-right:8px; vertical-align:middle; }
+.popup-item { margin-bottom:8px; border-bottom:1px solid #eee; padding-bottom:6px; }
+
+@media (max-width: 800px){
+  #sidebar { position: relative; width: 100%; height: auto; z-index: 400; }
+  #map { left: 0; top: 320px; }
+}
