@@ -5,8 +5,9 @@
 
 const CONFIG = {
     // Google Gemini API Configuration
-    // IMPORTANT: Replace with your actual API key from https://makersuite.google.com/app/apikey
-    GEMINI_API_KEY: 'AIzaSyDWgrRsdTkF5584BTgKoMg_tq5LXMzgpX8',
+    // The API key is now loaded from src/.env.js, which is not committed to git.
+    // See src/.env.js to add your key.
+    GEMINI_API_KEY: (window.ENV && window.ENV.GEMINI_API_KEY) || '',
     GEMINI_API_URL: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
     
     // Application Settings

@@ -52,8 +52,7 @@ const CrimeData = {
      * @returns {Promise<void>}
      */
     async loadDataForYear(year) {
-        // Path is relative to the `src` directory where index.html is served.
-        const filePath = `../docs/data/crimedata_csv_AllNeighbourhoods_${year}/crimedata_csv_AllNeighbourhoods_${year}.csv`;
+        const filePath = `data_csv/crimedata_csv_AllNeighbourhoods_${year}/crimedata_csv_AllNeighbourhoods_${year}.csv`;
         console.log(`Attempting to load data for ${year} from: ${filePath}`);
         
         return new Promise((resolve, reject) => {
