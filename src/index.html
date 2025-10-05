@@ -96,11 +96,25 @@
             <div id="stats-grid"></div>
         </main>
 
+            
+
+        <!-- NEW: vertical splitter -->
+        <div id="chat-resizer" title="Drag to resize"></div>
+
+    
         <!-- Right Panel: Chatbot -->
         <aside class="right-panel chatbot-container">
             <button id="toggle-chat" class="chat-toggle-btn">💬</button>
             <div class="chatbot-header">
                 <h2>AI Assistant</h2>
+                <div class="chat-controls">
+                    <button id="chat-undock" title="Undock">↗</button>
+                    <button id="chat-dock" title="Dock" style="display:none">🧲</button>
+                    <button id="chat-minimize" title="Minimize">—</button>
+                    <button id="chat-hide" title="Hide">⤴</button>
+
+                </div>
+                
             </div>
             <div id="chat-messages" class="chat-messages">
                 <div class="chat-message assistant">
@@ -147,5 +161,10 @@
     <script src="heatmap.js"></script>
     <script src="gemini.js"></script>
     <script src="app.js"></script>
+    <button id="chat-show-fab" class="primary-btn" style="display:none; position:fixed; right:16px; bottom:16px; z-index:1100;">
+        Show Chat
+    </button>
+
+
 </body>
 </html>
