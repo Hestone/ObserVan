@@ -10,7 +10,7 @@ const CONFIG = {
     GEMINI_API_URL: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
     
     // Application Settings
-    APP_NAME: 'ObserveVan',
+    APP_NAME: 'ObserVan',
     APP_VERSION: '1.0.0',
     
     // Threat Level Thresholds
@@ -29,7 +29,7 @@ const CONFIG = {
     },
     
     // Default Settings
-    DEFAULT_YEAR: '2024',
+    DEFAULT_YEAR: '2025',
     DEFAULT_CRIME_TYPE: 'all'
 };
 
