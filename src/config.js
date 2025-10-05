@@ -6,8 +6,8 @@
 const CONFIG = {
     // Google Gemini API Configuration
     // IMPORTANT: Replace with your actual API key from https://makersuite.google.com/app/apikey
-    GEMINI_API_KEY: 'YOUR_GEMINI_API_KEY_HERE',
-    GEMINI_API_URL: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+    GEMINI_API_KEY: 'AIzaSyDWgrRsdTkF5584BTgKoMg_tq5LXMzgpX8',
+    GEMINI_API_URL: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
     
     // Application Settings
     APP_NAME: 'ObserveVan',

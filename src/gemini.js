@@ -1,3 +1,6 @@
+// import dotenv from "dotenv";
+// dotenv.config();
+// // const apikey = process.env.API_KEY;
 /**
  * Google Gemini AI Chatbot Module for ObserveVan
  * Provides conversational AI for route safety and neighborhood analysis
@@ -7,20 +10,22 @@ const GeminiAI = {
     conversationHistory: [],
     currentYear: '2024',
     currentCrimeType: 'all',
+    currentLocation: 'all',
     
     /**
      * Check if Gemini API key is configured
      */
     isConfigured() {
-        return CONFIG.GEMINI_API_KEY && CONFIG.GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE';
+        return Boolean(CONFIG.GEMINI_API_KEY); //&& CONFIG.GEMINI_API_KEY !== apikey;
     },
     
     /**
      * Update context with current filters
      */
-    updateContext(year, crimeType) {
+    updateContext(year, crimeType, location) {
         this.currentYear = year;
         this.currentCrimeType = crimeType;
+        this.currentLocation = location;
     },
 
     /**
@@ -78,22 +83,33 @@ const GeminiAI = {
     buildContext(userMessage) {
         const context = {
             year: this.currentYear,
-            crimeType: this.currentCrimeType
+            crimeType: this.currentCrimeType,
+            location: this.currentLocation
         };
         
-        // Get city-wide stats
-        const stats = CrimeData.getCityStats(this.currentYear, this.currentCrimeType);
-        context.cityStats = stats;
+        // Get stats based on current location
+        if (this.currentLocation === 'all') {
+            const stats = CrimeData.getCityStats(this.currentYear, this.currentCrimeType);
+            context.cityStats = stats;
+        } else {
+            const data = CrimeData.getNeighborhoodData(this.currentLocation, this.currentYear, this.currentCrimeType);
+            context.neighborhoodStats = {
+                ...data,
+                threatLevel: HeatmapRenderer.getThreatLevelLabel(data.incidents),
+                topHours: data.topHours || [],
+                hourCounts: data.hourCounts || {},
+                peakTimeOfDay: data.peakTimeOfDay || 'N/A'
+            };
+        }
         
-        // Check if specific neighborhoods are mentioned
+        // Check if other neighborhoods are mentioned
         const mentionedNeighborhoods = [];
-        for (const name in CrimeData.neighborhoods) {
+        for (const name in CrimeData.neighborhoodCoordinates) {
             if (userMessage.toLowerCase().includes(name.toLowerCase())) {
                 const data = CrimeData.getNeighborhoodData(name, this.currentYear, this.currentCrimeType);
-                const neighborhood = CrimeData.neighborhoods[name];
                 mentionedNeighborhoods.push({
                     ...data,
-                    coordinates: neighborhood.coordinates,
+                    coordinates: CrimeData.neighborhoodCoordinates[name],
                     threatLevel: HeatmapRenderer.getThreatLevelLabel(data.incidents)
                 });
             }
@@ -101,12 +117,12 @@ const GeminiAI = {
         context.mentionedNeighborhoods = mentionedNeighborhoods;
         
         // Get all neighborhoods sorted by safety (for route analysis)
-        const allNeighborhoods = CrimeData.getAllNeighborhoods(this.currentYear, this.currentCrimeType)
+        const allNeighborhoods = Object.keys(CrimeData.neighborhoodCoordinates)
+            .map(name => CrimeData.getNeighborhoodData(name, this.currentYear, this.currentCrimeType))
             .map(n => {
-                const neighborhood = CrimeData.neighborhoods[n.name];
                 return {
                     ...n,
-                    coordinates: neighborhood.coordinates,
+                    coordinates: CrimeData.neighborhoodCoordinates[n.name],
                     threatLevel: HeatmapRenderer.getThreatLevelLabel(n.incidents)
                 };
             })
@@ -119,51 +135,92 @@ const GeminiAI = {
     },
 
     /**
+     * Create a prompt for generating a quick analysis
+     */
+    createAnalysisPrompt(context) {
+        let prompt = `Analyze the following crime data for ${context.location} in ${context.year} for crime type "${context.crimeType}". Provide a comprehensive summary.`;
+
+        if (context.location === 'all') {
+            prompt += `\n\nCity-wide stats: ${context.cityStats.total.toLocaleString()} incidents.`;
+            prompt += `\n\nTop 5 neighborhoods by incidents:`;
+            context.topNeighborhoods.forEach((n, i) => {
+                prompt += `\n${i + 1}. ${n.name}: ${n.incidents.toLocaleString()} incidents`;
+            });
+            prompt += `\n\nProvide insights into the overall crime landscape in Vancouver.`;
+        } else {
+            prompt += `\n\nNeighborhood: ${context.neighborhoodStats.name}`;
+            prompt += `\nIncidents: ${context.neighborhoodStats.incidents.toLocaleString()}`;
+            prompt += `\nBreakdown: Theft (${context.neighborhoodStats.theft}), Break-in (${context.neighborhoodStats.break}), Vehicle-related (${context.neighborhoodStats.vehicle}), Person-related (${context.neighborhoodStats.person}).`;
+            prompt += `\n\nProvide a detailed analysis of this neighborhood's safety profile.`;
+        }
+        
+        return prompt;
+    },
+
+    /**
      * Create chat prompt with context
      */
     createChatPrompt(userMessage, context) {
         const crimeTypeLabel = context.crimeType === 'all' ? 'all crime types' : context.crimeType;
         
-        let prompt = `You are a helpful Vancouver safety assistant with access to real crime data. You help people understand neighborhood safety and plan safe routes in Vancouver.
+        let prompt = `You are ObserveVan AI, a helpful assistant for analyzing crime data in Vancouver.
+Your primary goal is to answer user questions about crime and safety using the provided data.
 
-Current Context:
-- Year: ${context.year}
-- Crime Focus: ${crimeTypeLabel}
-- City Total Incidents: ${context.cityStats.total}
-- City Average: ${context.cityStats.average} per neighborhood
+**SYSTEM DATA**
+- Current Year: ${context.year}
+- Current Crime Filter: ${crimeTypeLabel}
+- Current Location Focus: ${context.location}
 
-Safest Neighborhoods (${context.year}):
-${context.safestAreas.map((n, i) => `${i + 1}. ${n.name}: ${n.incidents} incidents (${n.threatLevel})`).join('\n')}
-
-Highest Crime Neighborhoods (${context.year}):
-${context.highestCrimeAreas.map((n, i) => `${i + 1}. ${n.name}: ${n.incidents} incidents (${n.threatLevel})`).join('\n')}
+**LOCATION-SPECIFIC DATA**
 `;
 
+        if (context.location === 'all') {
+            prompt += `- City-wide Incidents: ${context.cityStats.total.toLocaleString()}\n`;
+        } else {
+            prompt += `- Neighborhood: ${context.neighborhoodStats.name}\n`;
+            prompt += `- Incidents: ${context.neighborhoodStats.incidents.toLocaleString()}\n`;
+            prompt += `- Threat Level: ${context.neighborhoodStats.threatLevel}\n`;
+            prompt += `- Peak Crime Time: ${context.neighborhoodStats.peakTimeOfDay}\n`;
+            // Add time summary when available
+            if (context.neighborhoodStats.topHours && context.neighborhoodStats.topHours.length) {
+                const top = context.neighborhoodStats.topHours.map(h=> `${h.hour}:00 (${h.count} incidents)`).join(', ');
+                prompt += `- Top 3 Peak Hours: ${top}\n`;
+            }
+        }
+        
         if (context.mentionedNeighborhoods.length > 0) {
-            prompt += `\n\nNeighborhoods mentioned in user query:
-${context.mentionedNeighborhoods.map(n => `- ${n.name}: ${n.incidents} incidents (${n.threatLevel}), Location: [${n.coordinates[0].toFixed(4)}, ${n.coordinates[1].toFixed(4)}]`).join('\n')}`;
+            prompt += "\n**ADDITIONAL MENTIONED NEIGHBORHOODS DATA**\n";
+            context.mentionedNeighborhoods.forEach(n => {
+                prompt += `- ${n.name}: ${n.incidents} incidents, Threat: ${n.threatLevel}.`;
+                if (n.topHours && n.topHours.length > 0) {
+                    const top = n.topHours.map(h=> `${h.hour}:00 (${h.count})`).join(', ');
+                    prompt += ` Peak Hours: ${top}.\n`;
+                } else {
+                    prompt += ` No specific peak hour data available.\n`;
+                }
+            });
         }
 
         // Add conversation history if exists
         if (this.conversationHistory.length > 0) {
-            prompt += `\n\nRecent Conversation:\n`;
+            prompt += `\n**RECENT CONVERSATION HISTORY**\n`;
             this.conversationHistory.slice(-6).forEach(entry => {
                 prompt += `${entry.role === 'user' ? 'User' : 'Assistant'}: ${entry.content}\n`;
             });
         }
 
-        prompt += `\n\nUser Question: ${userMessage}
+        prompt += `\n**USER QUESTION**\n${userMessage}\n`;
 
-Guidelines for your response:
-1. For safety questions: Provide specific information about the neighborhood(s) asked about, including crime statistics and threat level
-2. For route questions: Suggest routes that pass through safer neighborhoods, mentioning specific areas to prefer or avoid
-3. For "is it safe" questions: Give a balanced answer based on the data, including time-of-day considerations if relevant
-4. Be concise (under 200 words) but informative
-5. Always reference the actual data (incident counts, threat levels)
-6. If asked about specific times (night/day), mention that data doesn't distinguish but provide general safety advice
-7. Suggest specific alternative routes when relevant, naming actual neighborhoods
+        prompt += `\n**RESPONSE GUIDELINES**
+1. For safety questions, use the provided incident counts and threat levels.
+2. For route questions, suggest safer routes by naming specific neighborhoods to prefer or avoid.
+3. For "is it safe" questions, give a balanced answer based on the data.
+4. **Crucially, if asked about specific times (e.g., "at night", "in the morning"), you MUST use the "Peak Crime Hours" data to give a specific, data-driven answer. If that data is not available for a location, say so and provide general safety advice.**
+5. Be concise (under 200 words) but informative.
+6. Always reference the provided data in your answer.
 
-Response:`;
+**ASSISTANT RESPONSE**
+`;
 
         return prompt;
     },
@@ -218,70 +275,50 @@ Response:`;
     },
 
     /**
-     * Generate one-time analysis (for analyze button)
+     * Generate a comprehensive analysis for the current view
      */
-    async generateAnalysis(year, crimeType) {
+    async generateAnalysis(year, crimeType, location) {
         if (!this.isConfigured()) {
             return {
                 success: false,
-                error: 'Please configure your Google Gemini API key in config.js. Get your free API key at: https://makersuite.google.com/app/apikey'
+                error: 'Please configure your Google Gemini API key in config.js.'
             };
         }
-
+        
         try {
-            const neighborhoods = CrimeData.getAllNeighborhoods(year, crimeType);
-            const stats = CrimeData.getCityStats(year, crimeType);
+            // Build context
+            const context = {
+                year,
+                crimeType,
+                location
+            };
             
-            neighborhoods.sort((a, b) => b.incidents - a.incidents);
-            const topAreas = neighborhoods.slice(0, 5);
-            const bottomAreas = neighborhoods.slice(-5).reverse();
+            if (location === 'all') {
+                context.cityStats = CrimeData.getCityStats(year, crimeType);
+                context.topNeighborhoods = CrimeData.getTopNeighborhoods(year, crimeType, 5);
+            } else {
+                context.neighborhoodStats = CrimeData.getNeighborhoodData(location, year, crimeType);
+            }
             
-            const prompt = this.createAnalysisPrompt(year, crimeType, stats, topAreas, bottomAreas);
-            const response = await this.callGeminiAPI(prompt);
+            // Create prompt
+            const prompt = this.createAnalysisPrompt(context);
+            
+            // Call Gemini
+            const analysis = await this.callGeminiAPI(prompt);
             
             return {
                 success: true,
-                analysis: response
+                analysis
             };
         } catch (error) {
-            console.error('Gemini API Error:', error);
+            console.error('Gemini Analysis Error:', error);
             return {
                 success: false,
-                error: `Failed to generate analysis: ${error.message}`
+                error: `Analysis failed: ${error.message}`
             };
         }
     },
-
-    /**
-     * Create analysis prompt for one-time analysis
-     */
-    createAnalysisPrompt(year, crimeType, stats, topAreas, bottomAreas) {
-        const crimeTypeLabel = crimeType === 'all' ? 'all crime types' : crimeType;
-        
-        return `You are a crime data analyst for Vancouver, Canada. Analyze the following crime statistics for ${year} focusing on ${crimeTypeLabel}.
-
-City-wide Statistics:
-- Total Incidents: ${stats.total}
-- Average per Neighborhood: ${stats.average}
-- Highest Count: ${stats.max}
-- Lowest Count: ${stats.min}
-- Number of Neighborhoods: ${stats.neighborhoods}
-
-Top 5 Highest Crime Areas:
-${topAreas.map((area, i) => `${i + 1}. ${area.name}: ${area.incidents} incidents`).join('\n')}
-
-Top 5 Lowest Crime Areas:
-${bottomAreas.map((area, i) => `${i + 1}. ${area.name}: ${area.incidents} incidents`).join('\n')}
-
-Please provide:
-1. A brief overview of the crime situation in Vancouver for ${year}
-2. Analysis of the patterns you observe (why certain areas might have higher/lower crime)
-3. Key insights about the safest and most challenging neighborhoods
-4. General safety recommendations for residents and visitors
-
-Keep the analysis concise, informative, and under 250 words. Focus on actionable insights.`;
-    },
-
+    
     /**
      * Display analysis in UI (for analyze button)
      */
