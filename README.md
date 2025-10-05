@@ -1,8 +1,8 @@
-# ObserveVan 🗺️
+# ObserVan 🗺️
 
 A crime heatmap visualization website for Vancouver that displays regions/areas with color-coded threat levels based on historical crime data from the Vancouver Police Department.
 
-![ObserveVan Preview](https://img.shields.io/badge/status-active-success) ![Built with HTML](https://img.shields.io/badge/HTML-orange) ![Built with CSS](https://img.shields.io/badge/CSS-blue) ![Built with JavaScript](https://img.shields.io/badge/JavaScript-yellow) ![AI Powered](https://img.shields.io/badge/AI-Google%20Gemini-purple)
+![ObserVan Preview](https://img.shields.io/badge/status-active-success) ![Built with HTML](https://img.shields.io/badge/HTML-orange) ![Built with CSS](https://img.shields.io/badge/CSS-blue) ![Built with JavaScript](https://img.shields.io/badge/JavaScript-yellow) ![AI Powered](https://img.shields.io/badge/AI-Google%20Gemini-purple)
 
 ## Features ✨
 
@@ -24,7 +24,7 @@ A crime heatmap visualization website for Vancouver that displays regions/areas 
 ## Project Structure 📁
 
 ```
-ObserveVan/
+ObserVan/
 ├── src/
 │   ├── index.html          # Main HTML structure
 │   ├── styles.css          # Styling and responsive design
@@ -52,8 +52,8 @@ ObserveVan/
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/ObserveVan.git
-   cd ObserveVan
+   git clone https://github.com/yourusername/ObserVan.git
+   cd ObserVan
    ```
 
 2. **Configure Google Gemini API (Optional but Recommended)**
@@ -132,7 +132,7 @@ ObserveVan/
 
 ### Why Gemini?
 
-Google Gemini adds intelligence to ObserveVan by:
+Google Gemini adds intelligence to ObserVan by:
 - Analyzing crime patterns and trends
 - Providing contextual insights about neighborhoods
 - Generating personalized safety recommendations
@@ -331,7 +331,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contact 📧
 
-Project Link: [https://github.com/Hestone/ObserveVan](https://github.com/Hestone/ObserveVan)
+Project Link: [https://github.com/Hestone/ObserVan](https://github.com/Hestone/ObserVan)
 
 ## Disclaimer ⚠️
 
