@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ObserveVan - Vancouver Crime Insights</title>
+    <title>ObserVan - Vancouver Crime Insights</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -25,36 +25,21 @@
         <!-- Left Panel: Filters -->
         <aside class="left-panel">
             <header class="app-header">
-                <h1>ObserveVan</h1>
+                <h1>ObserVan</h1>
                 <p>Vancouver Crime Insights</p>
             </header>
             <nav class="filters-nav">
                 <h2>Filters</h2>
 
-                <!-- Date range controls (month / year) -->
-                <label for="start_month">Date from (month / year)</label>
+                <!-- Date range controls (calendar pickers) -->
+                <label for="start_date">Date from</label>
                 <div class="filter-row" style="display:flex; gap:8px;">
-                    <select id="start_month"></select>
-                    <select id="start_year"></select>
+                    <input type="date" id="start_date" min="2020-01-01" max="2025-12-31" />
                 </div>
 
-                <label for="end_month">Date to (month / year)</label>
+                <label for="end_date">Date to</label>
                 <div class="filter-row" style="display:flex; gap:8px;">
-                    <select id="end_month"></select>
-                    <select id="end_year"></select>
-                </div>
-
-                <!-- Keep single-year selector for backward compatibility with existing logic -->
-                <div class="filter-group">
-                    <label for="year-select">Year</label>
-                    <select id="year-select">
-                        <option value="2025">2025</option>
-                        <option value="2024">2024</option>
-                        <option value="2023">2023</option>
-                        <option value="2022">2022</option>
-                        <option value="2021">2021</option>
-                        <option value="2020">2020</option>
-                    </select>
+                    <input type="date" id="end_date" min="2020-01-01" max="2025-12-31" />
                 </div>
 
                 <!-- Multi-select crime types (Choices.js will enhance this when available) -->
@@ -64,16 +49,7 @@
                 <label for="location-select">Neighbourhood</label>
                 <select id="location-select"><option value="all">All Vancouver</option></select>
 
-                <div style="display:flex; gap:8px; margin-top:12px;">
-                    <button id="apply-filters">Apply</button>
-                    <button id="reset-filters">Reset</button>
-                </div>
-
-                <div style="margin-top:12px;">
-                    <a href="/crime_map.html" target="_blank">Open simple map (static)</a>
-                </div>
-
-                <hr />
+                <hr/>
 
                 <div id="legend">
                     <h4>Legend</h4>
@@ -82,6 +58,8 @@
                     <div><span class="dot" style="background:#fdae61"></span> High</div>
                     <div><span class="dot" style="background:#d7191c"></span> Very high</div>
                 </div>
+
+                <hr/>
             </nav>
             <footer class="app-footer">
                 <button id="analyze-btn" class="primary-btn">
@@ -94,13 +72,24 @@
         <main class="main-content">
             <div id="map"></div>
             <div id="stats-grid"></div>
-        </main>
+        </main>        
+
+        <!-- NEW: vertical splitter -->
+        <div id="chat-resizer" title="Drag to resize"></div>
 
         <!-- Right Panel: Chatbot -->
         <aside class="right-panel chatbot-container">
             <button id="toggle-chat" class="chat-toggle-btn">💬</button>
             <div class="chatbot-header">
                 <h2>AI Assistant</h2>
+                <div class="chat-controls">
+                    <button id="chat-undock" title="Undock">↗</button>
+                    <button id="chat-dock" title="Dock" style="display:none">🧲</button>
+                    <button id="chat-minimize" title="Minimize">—</button>
+                    <button id="chat-hide" title="Hide">⤴</button>
+
+                </div>
+                
             </div>
             <div id="chat-messages" class="chat-messages">
                 <div class="chat-message assistant">
@@ -148,5 +137,8 @@
     <script src="gemini.js"></script>
     <script src="routePlanner.js"></script>
     <script src="app.js"></script>
+    <button id="chat-show-fab" class="primary-btn" style="display:none; position:fixed; right:16px; bottom:16px; z-index:1100;">
+        Show Chat
+    </button>
 </body>
 </html>
