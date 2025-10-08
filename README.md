@@ -1,4 +1,4 @@
-# ObserVan (SFU StormHacks Project) 🗺️
+# ObserVan (SFU StormHacks 2025 Project) 🗺️
 
 A crime heatmap visualization website for Vancouver that displays regions/areas with color-coded threat levels based on historical crime data from the Vancouver Police Department.
 
