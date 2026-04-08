@@ -336,10 +336,10 @@ const HeatmapRenderer = {
     getColorForType(type) {
         if (!type) return '#2b83ba';
         const s = String(type).toLowerCase();
-        if (s.includes('homicide') || s.includes('arson')) return '#d7191c';
-        if (s.includes('assault') || s.includes('violent') || s.includes('robbery')) return '#fdae61';
-        if (s.includes('theft') || s.includes('break') || s.includes('vehicle')) return '#ffffbf';
-        if (s.includes('drug') || s.includes('mischief')) return '#2b83ba';
-        return '#89c2d9';
+        if (s.includes('homicide') || s.includes('arson')) return '#8f2b20';
+        if (s.includes('assault') || s.includes('violent') || s.includes('robbery')) return '#e74c3c';
+        if (s.includes('theft') || s.includes('break') || s.includes('vehicle')) return '#e67e22';
+        if (s.includes('drug') || s.includes('mischief')) return '#f1c40f';
+        return '#2ecc71';
     },
 };

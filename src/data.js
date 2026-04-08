@@ -52,8 +52,7 @@ const CrimeData = {
      * @returns {Promise<void>}
      */
     async loadDataForYear(year) {
-        // Path is relative to the `src` directory where index.html is served.
-        const filePath = `../docs/data/crimedata_csv_AllNeighbourhoods_${year}/crimedata_csv_AllNeighbourhoods_${year}.csv`;
+        const filePath = `data_csv/crimedata_csv_AllNeighbourhoods_${year}/crimedata_csv_AllNeighbourhoods_${year}.csv`;
         console.log(`Attempting to load data for ${year} from: ${filePath}`);
         
         return new Promise((resolve, reject) => {
@@ -89,14 +88,12 @@ const CrimeData = {
             if (!data[neighborhood]) {
                 data[neighborhood] = {
                     all: 0,
-                    break: 0,
+                    commercial: 0,
+                    residential: 0,
                     theft: 0,
                     vehicle: 0,
                     person: 0,
                     mischief: 0,
-                    robbery: 0,
-                    arson: 0,
-                    drug: 0,
                     other: 0,
                     hourCounts: {},    // counts per hour
                     topHours: []       // filled after processing
@@ -186,25 +183,32 @@ const CrimeData = {
      */
     categorizeCrime(vpdType) {
         if (!vpdType) return 'other';
-
-        const t = String(vpdType).trim().toLowerCase();
-
-        // More specific categories first
-        if (t === 'robbery') return 'robbery';
-        if (t === 'arson') return 'arson';
-        if (t.startsWith('break and enter')) return 'break';
-        if (t === 'vehicle collision or pedestrian struck (with injury)') return 'person';
-        if (t === 'vehicle collision or pedestrian struck (with fatality)') return 'person';
         
-        // Broader categories
-        if (t.includes('assault')) return 'person';
-        if (t.includes('offence against a person')) return 'person';
-        if (t.includes('theft of vehicle')) return 'vehicle';
-        if (t.includes('theft from vehicle')) return 'vehicle';
-        if (t.includes('theft of bicycle')) return 'theft';
-        if (t === 'other theft') return 'theft';
-        if (t.includes('mischief')) return 'mischief';
-        if (t.includes('drug')) return 'drug';
+        // Break and Enter cases
+        if (vpdType.startsWith('Break and Enter Commercial')) {
+            return 'commercial';
+        }
+        if (vpdType.startsWith('Break and Enter Residential')) {
+            return 'residential';
+        }
+        
+        // Theft cases
+        if (vpdType.startsWith('Theft of Vehicle') || vpdType.startsWith('Theft of Bicycle') || vpdType === 'Other Theft') {
+            return 'theft';
+        }
+        if (vpdType.startsWith('Theft from Vehicle')) {
+            return 'vehicle';
+        }
+        
+        // Violence against person
+        if (vpdType.startsWith('Homicide') || vpdType.startsWith('Assault') || vpdType.includes('Violence')) {
+            return 'person';
+        }
+
+        // Mischief
+        if (vpdType.includes('Mischief')) {
+            return 'mischief';
+        }
 
         return 'other';
     },
@@ -238,7 +242,7 @@ const CrimeData = {
     /**
      * Get all neighborhoods for a specific year and crime type.
      */
-    getAllNeighborhoods(year = '2024', crimeType = 'all') {
+    getAllNeighborhoods(year = '2025', crimeType = 'all') {
         const yearData = this.crimeDataByYear[String(year)];
         if (!yearData) return [];
 
@@ -250,7 +254,7 @@ const CrimeData = {
     /**
      * Calculate statistics for the entire city.
      */
-    getCityStats(year = '2024', crimeType = 'all') {
+    getCityStats(year = '2025', crimeType = 'all') {
         const neighborhoods = this.getAllNeighborhoods(year, crimeType);
         if (neighborhoods.length === 0) {
             return { total: 0, average: 0, max: 0, min: 0, neighborhoods: 0 };

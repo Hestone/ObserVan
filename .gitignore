@@ -42,6 +42,7 @@ temp/
 .env.development
 .env.test
 .env.production
+src/.env.js
 
 # Cache
 .cache/
