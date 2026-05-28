@@ -1,128 +1,210 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ObserveVan - Vancouver Crime Heatmap</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ObserveVan — Vancouver Crime Map</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- MarkerCluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <!-- PapaParse -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <!-- Choices.js -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+  <!-- App styles -->
+  <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
-    <header class="header">
-        <div class="container">
-            <h1 class="logo">🗺️ ObserveVan</h1>
-            <p class="tagline">Vancouver Crime Threat Level Heatmap</p>
+
+<!-- Mobile header -->
+<header class="mobile-header">
+  <button id="open-filters-btn" class="icon-btn" aria-label="Open filters">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+  <span class="app-title">ObserveVan</span>
+  <button id="open-chat-btn" class="icon-btn" aria-label="Open chat">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  </button>
+</header>
+
+<div class="panel-overlay" id="panel-overlay"></div>
+
+<!-- Main 3-column layout -->
+<div class="app-container">
+
+  <!-- LEFT PANEL — filters -->
+  <aside class="left-panel" id="left-panel">
+    <div class="panel-header">
+      <h1 class="panel-title">ObserveVan</h1>
+      <button class="close-panel-btn" id="close-left-btn" aria-label="Close">✕</button>
+    </div>
+    <p class="panel-subtitle">Vancouver Crime Heatmap</p>
+
+    <div class="filter-section">
+      <h3 class="section-title">Date Range</h3>
+      <div class="date-row">
+        <label>From</label>
+        <div class="date-selects">
+          <select id="start_month" class="select-sm">
+            <option value="1">Jan</option><option value="2">Feb</option>
+            <option value="3">Mar</option><option value="4">Apr</option>
+            <option value="5">May</option><option value="6">Jun</option>
+            <option value="7">Jul</option><option value="8">Aug</option>
+            <option value="9">Sep</option><option value="10">Oct</option>
+            <option value="11">Nov</option><option value="12">Dec</option>
+          </select>
+          <select id="start_year" class="select-sm">
+            <option value="2020">2020</option><option value="2021">2021</option>
+            <option value="2022">2022</option><option value="2023">2023</option>
+            <option value="2024" selected>2024</option><option value="2025">2025</option>
+          </select>
         </div>
-    </header>
-
-    <main class="container">
-        <section class="controls">
-            <div class="control-group">
-                <label for="year-select">Select Year:</label>
-                <select id="year-select">
-                    <option value="2024">2024</option>
-                    <option value="2023">2023</option>
-                    <option value="2022">2022</option>
-                    <option value="2021">2021</option>
-                    <option value="2020">2020</option>
-                </select>
-            </div>
-            <div class="control-group">
-                <label for="crime-type-select">Crime Type:</label>
-                <select id="crime-type-select">
-                    <option value="all">All Crimes</option>
-                    <option value="theft">Theft</option>
-                    <option value="break">Break and Enter</option>
-                    <option value="vehicle">Vehicle Collision or Theft</option>
-                    <option value="person">Offence Against a Person</option>
-                </select>
-            </div>
-            <button id="analyze-btn" class="btn btn-primary">
-                🤖 AI Analysis (Gemini)
-            </button>
-        </section>
-
-        <section class="legend">
-            <h3>Threat Level Legend</h3>
-            <div class="legend-items">
-                <div class="legend-item">
-                    <span class="legend-color" style="background-color: #2ecc71;"></span>
-                    <span>Very Low (0-50 incidents)</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-color" style="background-color: #f1c40f;"></span>
-                    <span>Low (51-150 incidents)</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-color" style="background-color: #e67e22;"></span>
-                    <span>Moderate (151-300 incidents)</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-color" style="background-color: #e74c3c;"></span>
-                    <span>High (301-500 incidents)</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-color" style="background-color: #c0392b;"></span>
-                    <span>Very High (500+ incidents)</span>
-                </div>
-            </div>
-        </section>
-
-        <section class="map-container">
-            <div id="map" class="map"></div>
-            <div id="map-loading" class="map-loading hidden">Loading map...</div>
-        </section>
-
-        <section class="chatbot-container">
-            <div class="chatbot-header">
-                <h3>🤖 Safety Assistant (Gemini AI)</h3>
-                <button id="toggle-chat" class="btn-icon" title="Minimize/Maximize">−</button>
-            </div>
-            <div id="chat-messages" class="chat-messages">
-                <div class="chat-message assistant">
-                    <div class="message-content">
-                        <p><strong>Hello! I'm your Vancouver safety assistant.</strong></p>
-                        <p>I can help you with:</p>
-                        <ul>
-                            <li>🗺️ Finding safe routes to your destination</li>
-                            <li>🛡️ Safety information about neighborhoods</li>
-                            <li>📊 Crime statistics and patterns</li>
-                            <li>💡 General safety recommendations</li>
-                        </ul>
-                        <p>Try asking: "Is it safe to go to Downtown?" or "What's the safest route from Kitsilano to UBC?"</p>
-                    </div>
-                </div>
-            </div>
-            <div class="chat-input-container">
-                <textarea id="chat-input" placeholder="Ask about routes or safety... (e.g., 'Is Gastown safe at night?')" rows="2"></textarea>
-                <button id="send-message" class="btn btn-primary">
-                    <span class="send-icon">➤</span> Send
-                </button>
-            </div>
-        </section>
-
-        <section class="stats-container">
-            <h3>Neighborhood Statistics</h3>
-            <div id="stats-grid" class="stats-grid"></div>
-        </section>
-    </main>
-
-    <footer class="footer">
-        <div class="container">
-            <p>Data Source: <a href="https://geodash.vpd.ca/opendata/" target="_blank">Vancouver Police Department Open Data</a></p>
-            <p>⚠️ Note: Data is for informational purposes only. Location data is intentionally randomized for privacy protection.</p>
-            <p>&copy; 2025 ObserveVan | Built with HTML, CSS, JavaScript & Google Gemini AI</p>
+      </div>
+      <div class="date-row">
+        <label>To</label>
+        <div class="date-selects">
+          <select id="end_month" class="select-sm">
+            <option value="1">Jan</option><option value="2">Feb</option>
+            <option value="3">Mar</option><option value="4">Apr</option>
+            <option value="5">May</option><option value="6">Jun</option>
+            <option value="7">Jul</option><option value="8">Aug</option>
+            <option value="9">Sep</option><option value="10">Oct</option>
+            <option value="11">Nov</option><option value="12" selected>Dec</option>
+          </select>
+          <select id="end_year" class="select-sm">
+            <option value="2020">2020</option><option value="2021">2021</option>
+            <option value="2022">2022</option><option value="2023">2023</option>
+            <option value="2024" selected>2024</option><option value="2025">2025</option>
+          </select>
         </div>
-    </footer>
+      </div>
+    </div>
 
-    <script src="config.js"></script>
-    <script src="data.js"></script>
-    <script src="heatmap.js"></script>
-    <script src="gemini.js"></script>
-    <script src="app.js"></script>
+    <!-- Hidden legacy year select (kept for compat) -->
+    <div id="year-select-group" style="display:none">
+      <select id="year-select"></select>
+    </div>
+
+    <div class="filter-section">
+      <h3 class="section-title">Crime Type</h3>
+      <select id="crime-type-select">
+        <option value="all">All Types</option>
+      </select>
+    </div>
+
+    <div class="filter-section">
+      <h3 class="section-title">Location</h3>
+      <select id="location-select">
+        <option value="all">All Vancouver</option>
+      </select>
+    </div>
+
+    <div class="filter-actions">
+      <button id="apply-filters" class="primary-btn">Apply Filters</button>
+      <button id="reset-filters" class="secondary-btn">Reset</button>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend-section">
+      <h3 class="section-title">Incident Intensity</h3>
+      <div class="heat-legend">
+        <div class="heat-gradient"></div>
+        <div class="heat-labels"><span>Low</span><span>Medium</span><span>High</span></div>
+      </div>
+      <div class="legend-types">
+        <div class="legend-item"><span class="dot" style="background:#e74c3c"></span>Theft / B&amp;E</div>
+        <div class="legend-item"><span class="dot" style="background:#f39c12"></span>Vehicle</div>
+        <div class="legend-item"><span class="dot" style="background:#9b59b6"></span>Person</div>
+        <div class="legend-item"><span class="dot" style="background:#3498db"></span>Mischief</div>
+      </div>
+    </div>
+
+    <!-- AI Assistant -->
+    <div class="ai-section">
+      <button id="toggle-chatbot" class="primary-btn ai-btn" disabled aria-disabled="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+        </svg>
+        AI Assistant
+      </button>
+      <p class="api-unavailable-note">⚠ AI features require a valid Gemini API key. Configure in config.js.</p>
+    </div>
+  </aside>
+
+  <!-- MAIN — map + stats -->
+  <main class="main-content">
+    <div id="map"></div>
+    <div id="stats-grid"></div>
+  </main>
+
+  <!-- RIGHT PANEL — chatbot -->
+  <aside class="right-panel chatbot-container" id="right-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">AI Assistant</h2>
+      <button class="close-panel-btn" id="close-right-btn" aria-label="Close">✕</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-message bot-message">
+        <div class="message-content">
+          Hello! I'm your AI crime analysis assistant. Ask me about crime trends in Vancouver neighbourhoods.
+        </div>
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="chat-input" placeholder="Ask about crime data..." disabled/>
+      <button id="send-message" class="primary-btn" disabled>Send</button>
+    </div>
+  </aside>
+</div>
+
+<!-- Loading overlay -->
+<div id="loading-overlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <p>Loading crime data…</p>
+</div>
+
+<!-- App scripts -->
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="heatmap.js"></script>
+<script src="gemini.js"></script>
+<script src="app.js"></script>
+
+<script>
+(function(){
+  const overlay = document.getElementById('panel-overlay');
+  const leftPanel = document.getElementById('left-panel');
+  const rightPanel = document.getElementById('right-panel');
+
+  function openPanel(panel) {
+    panel.classList.add('open');
+    overlay.classList.add('visible');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeAll() {
+    leftPanel.classList.remove('open');
+    rightPanel.classList.remove('open');
+    overlay.classList.remove('visible');
+    document.body.style.overflow = '';
+  }
+  document.getElementById('open-filters-btn').addEventListener('click', () => openPanel(leftPanel));
+  document.getElementById('open-chat-btn').addEventListener('click', () => openPanel(rightPanel));
+  document.getElementById('close-left-btn').addEventListener('click', closeAll);
+  document.getElementById('close-right-btn').addEventListener('click', closeAll);
+  overlay.addEventListener('click', closeAll);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
+})();
+</script>
 </body>
 </html>
