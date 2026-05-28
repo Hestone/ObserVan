@@ -1,749 +1,220 @@
 /**
  * Main Application Module for ObserveVan
- * Handles initialization, event listeners, and chatbot interactions
  */
 
-const ObserveVanApp = {
-    currentYear: CONFIG.DEFAULT_YEAR,
-    currentCrimeType: CONFIG.DEFAULT_CRIME_TYPE,
-    currentLocation: 'all',
+const MONTHS = [
+    'January','February','March','April','May','June',
+    'July','August','September','October','November','December'
+];
 
-    /**
-     * Initialize the application
-     */
+const ObserveVanApp = {
+    currentYear:      CONFIG.DEFAULT_YEAR,
+    currentCrimeType: CONFIG.DEFAULT_CRIME_TYPE,
+    currentLocation:  'all',
+    startYear:  2024,
+    startMonth: 1,
+    endYear:    2024,
+    endMonth:   12,
+
     async init() {
         console.log(`${CONFIG.APP_NAME} v${CONFIG.APP_VERSION} - Initializing...`);
-        
-        // Detect if a backend server with endpoints is available
+
         this.serverMode = false;
         try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 2000);
-            const res = await fetch('/date_meta', { signal: controller.signal });
-            clearTimeout(timeout);
-            if (res.ok) {
-                this.serverMode = true;
-                this.serverMeta = await res.json();
-                console.log('Server mode enabled — backend endpoints detected');
-            }
+            const ctrl = new AbortController();
+            const t    = setTimeout(() => ctrl.abort(), 2000);
+            const res  = await fetch('/date_meta', { signal: ctrl.signal });
+            clearTimeout(t);
+            if (res.ok) { this.serverMode = true; this.serverMeta = await res.json(); }
         } catch (e) {
-            console.log('No backend endpoints detected, using local CSV/sample data');
+            console.log('No backend detected — using local CSV/sample data');
         }
 
-        // If server mode, we don't need to parse large CSVs locally
-        if (!this.serverMode) {
-            // Load all data first (local CSVs)
-            await CrimeData.init();
-        }
+        if (!this.serverMode) await CrimeData.init();
 
-        // Set up event listeners
+        this._buildDateDropdowns();
+        this._populateCrimeTypeFilter();
+        this._populateLocationFilter();
         this.setupEventListeners();
-        
-        // Populate location and type filters (server-driven when available)
-        if (this.serverMode && this.serverMeta) {
-            // Populate crime types from server if endpoint exists
-            try {
-                const typesRes = await fetch('/types');
-                if (typesRes.ok) {
-                    const types = await typesRes.json();
-                    const crimeTypeSelect = document.getElementById('crime-type-select');
-                    // Do NOT include a visible "All Crime Types" option. Leave no-selection to mean 'all'.
-                    crimeTypeSelect.innerHTML = '';
-                    types.forEach(t => {
-                        const opt = document.createElement('option');
-                        opt.value = t;
-                        opt.textContent = t;
-                        crimeTypeSelect.appendChild(opt);
-                    });
-                    // If Choices.js is active, try to refresh its choices to reflect server-provided types
-                    try {
-                        if (window.__choices_crime_type && typeof window.__choices_crime_type.setChoices === 'function') {
-                            const choices = types.map(v => ({ value: v, label: v }));
-                            window.__choices_crime_type.setChoices(choices, 'value', 'label', true);
-                        }
-                    } catch (e) {
-                        console.warn('Failed to update Choices.js with server types', e);
-                    }
-                }
-            } catch (e) {
-                console.warn('Failed to populate types from server', e);
-            }
-
-            // Populate neighbourhood list from server
-            try {
-                const nRes = await fetch('/neighbourhoods');
-                if (nRes.ok) {
-                    const list = await nRes.json();
-                    const locationSelect = document.getElementById('location-select');
-                    // keep All Vancouver option
-                    locationSelect.innerHTML = '<option value="all">All Vancouver</option>';
-                    list.forEach(n => {
-                        const opt = document.createElement('option');
-                        opt.value = n.neighbourhood || n.name || n.name;
-                        opt.textContent = n.neighbourhood || n.name || n.name;
-                        locationSelect.appendChild(opt);
-                    });
-                }
-            } catch (e) {
-                console.warn('Failed to populate neighbourhoods from server', e);
-            }
-        } else {
-            // Populate location filter from local coordinates
-            this.populateLocationFilter();
-            // Populate crime type filter from loaded local data
-            this.populateCrimeTypeFilterFromData();
-            // Add Bus Route Planner UI
-            this.setupBusRouteUI();
-        }
-        
-        // Initial render
         this.updateVisualization();
-        
-        // Update Gemini context
         GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
-        
         console.log('Application initialized successfully');
     },
 
-    /**
-     * Set up event listeners for user interactions
-     */
-    setupEventListeners() {
-        // Location selector
-        const locationSelect = document.getElementById('location-select');
-        locationSelect.addEventListener('change', (e) => {
-            this.currentLocation = e.target.value;
-            this.updateVisualization();
-            GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
-        });
-
-        // Year selector
-        this.currentYear = this.currentYear || CONFIG.DEFAULT_YEAR;
-
-        // Date range inputs (new calendar pickers)
-        const startDateInput = document.getElementById('start_date');
-        const endDateInput = document.getElementById('end_date');
-
-        // Helper to set sensible defaults when application initializes
-        const setDefaultDatesForYear = (year) => {
-            // default to full calendar year
-            const start = `${year}-01-01`;
-            const end = `${year}-12-31`;
-            if (startDateInput && !startDateInput.value) startDateInput.value = start;
-            if (endDateInput && !endDateInput.value) endDateInput.value = end;
+    _buildDateDropdowns() {
+        const years = [2020, 2021, 2022, 2023, 2024, 2025];
+        const populate = (monthId, yearId, defaultYear, defaultMonth) => {
+            const mSel = document.getElementById(monthId);
+            const ySel = document.getElementById(yearId);
+            if (!mSel || !ySel) return;
+            mSel.innerHTML = MONTHS.map((name, i) =>
+                `<option value="${i+1}" ${i+1 === defaultMonth ? 'selected' : ''}>${name}</option>`
+            ).join('');
+            ySel.innerHTML = years.map(y =>
+                `<option value="${y}" ${y === defaultYear ? 'selected' : ''}>${y}</option>`
+            ).join('');
         };
-
-        // initialize defaults based on current year
-        setDefaultDatesForYear(this.currentYear);
-
-        // When either date changes, re-render visualization. Keep currentYear in sync with start date's year
-        const onDateRangeChange = () => {
-            // If start date exists, update currentYear to its year part for compatibility
-            if (startDateInput && startDateInput.value) {
-                const y = new Date(startDateInput.value).getFullYear();
-                this.currentYear = String(y);
-            }
-
-            // For now the visualization layer only accepts a single year; keep behavior consistent
-            this.updateVisualization();
-            GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
-        };
-
-        if (startDateInput) startDateInput.addEventListener('change', onDateRangeChange);
-        if (endDateInput) endDateInput.addEventListener('change', onDateRangeChange);
-
-        // Crime type selector
-        const crimeTypeSelect = document.getElementById('crime-type-select');
-        // Helper to read the crime type selection and return a single value for the renderer.
-        // If no option is selected, return 'all' (meaning: include all types).
-        this.getSelectedCrimeType = () => {
-            const sel = document.getElementById('crime-type-select');
-            if (!sel) return 'all';
-            const selected = Array.from(sel.selectedOptions || []).map(o => o.value).filter(Boolean);
-            if (selected.length === 0) return 'all';
-            if (selected.includes('all')) return 'all';
-            // If multiple types selected, we default to the first for compatibility with single-year renderer
-            return selected[0];
-        };
-
-        // Set initial crime type
-        this.currentCrimeType = this.getSelectedCrimeType();
-
-        if (crimeTypeSelect) crimeTypeSelect.addEventListener('change', (e) => {
-            this.currentCrimeType = this.getSelectedCrimeType();
-            this.updateVisualization();
-            GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
-        });
-
-        // Reset filters button
-        const resetBtn = document.getElementById('reset-filters');
-        if (resetBtn) {
-            resetBtn.addEventListener('click', () => {
-                // Reset dates to full current year
-                const year = this.currentYear;
-                if (startDateInput) startDateInput.value = `${year}-01-01`;
-                if (endDateInput) endDateInput.value = `${year}-12-31`;
-                // Reset crime type: deselect all (means 'all' crimes)
-                if (crimeTypeSelect) {
-                    Array.from(crimeTypeSelect.options).forEach(opt => opt.selected = false);
-                }
-                if (window.__choices_crime_type && typeof window.__choices_crime_type.removeActiveItems === 'function') {
-                    window.__choices_crime_type.removeActiveItems();
-                }
-                this.currentCrimeType = 'all';
-                // Reset location
-                if (locationSelect) locationSelect.value = 'all';
-                this.currentLocation = 'all';
-                // Update visualization and AI context
-                this.updateVisualization();
-                GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
-                console.log('Filters reset to defaults');
-            });
-        }
-
-        // AI Analysis button (quick analysis)
-        const analyzeBtn = document.getElementById('analyze-btn');
-        analyzeBtn.addEventListener('click', () => {
-            this.generateQuickAnalysis();
-        });
-
-        // Chatbot toggle button
-        const toggleChat = document.getElementById('toggle-chat');
-        toggleChat.addEventListener('click', () => {
-            this.toggleChatbot();
-        });
-
-        // Chat send button
-        const sendBtn = document.getElementById('send-message');
-        sendBtn.addEventListener('click', () => {
-            this.sendChatMessage();
-        });
-
-        // Chat input - send on Enter (but Shift+Enter for new line)
-        const chatInput = document.getElementById('chat-input');
-        chatInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                this.sendChatMessage();
-            }
-        });
-
-        this.initDraggableChat();
-
-        document.getElementById('chat-undock').addEventListener('click', () => {
-            this.enableFloatingChat();
-        });
-
-        document.getElementById('chat-dock').addEventListener('click', () => {
-            this.disableFloatingChat();
-        });
-
-        document.getElementById('chat-minimize').addEventListener('click', () => {
-            this.toggleMinimizeChat();
-        });
-        // Hide/show when docked
-        document.getElementById('chat-hide').addEventListener('click', () => {
-            const app = document.querySelector('.app-container');
-            // snap to hidden
-            app.classList.add('chat-hidden');
-            document.documentElement.style.setProperty('--chat-width', '0px');
-            // show the FAB
-            const fab = document.getElementById('chat-show-fab');
-            if (fab) fab.style.display = '';
-        });
-
-        document.getElementById('chat-show-fab').addEventListener('click', () => {
-            const app = document.querySelector('.app-container');
-            app.classList.remove('chat-hidden');
-            const saved = localStorage.getItem('chatWidthPx') || '350px';
-            document.documentElement.style.setProperty('--chat-width', saved);
-            const fab = document.getElementById('chat-show-fab');
-            if (fab) fab.style.display = 'none';
-        });
-        this.initChatResizer();
-
+        populate('start_month', 'start_year', this.startYear, this.startMonth);
+        populate('end_month',   'end_year',   this.endYear,   this.endMonth);
+        const legacyWrap = document.getElementById('year-select-group');
+        if (legacyWrap) legacyWrap.style.display = 'none';
     },
 
-    /**
-     * Update the visualization based on current selections
-     */
+    _populateCrimeTypeFilter() {
+        const sel = document.getElementById('crime-type-select');
+        if (!sel) return;
+        const types = CrimeData.getAllCrimeTypes ? CrimeData.getAllCrimeTypes() : [];
+        sel.innerHTML = '<option value="all">All Crime Types</option>' +
+            types.map(t => `<option value="${t}">${t}</option>`).join('');
+        if (window.__choices_crime_type) {
+            try { window.__choices_crime_type.destroy(); } catch(e) {}
+        }
+        if (window.Choices) {
+            try {
+                window.__choices_crime_type = new Choices(sel, {
+                    removeItemButton: false,
+                    shouldSort: false,
+                    placeholder: true,
+                    placeholderValue: 'Select crime type',
+                    searchEnabled: types.length > 8,
+                });
+            } catch(e) { console.warn('Choices reinit failed', e); }
+        }
+    },
+
+    _populateLocationFilter() {
+        const sel = document.getElementById('location-select');
+        if (!sel) return;
+        sel.innerHTML = '<option value="all">All Vancouver</option>';
+        Object.keys(CrimeData.neighborhoodCoordinates).sort().forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = opt.textContent = name;
+            sel.appendChild(opt);
+        });
+    },
+
+    setupEventListeners() {
+        document.getElementById('location-select')
+            ?.addEventListener('change', e => { this.currentLocation = e.target.value; });
+
+        document.getElementById('crime-type-select')
+            ?.addEventListener('change', e => { this.currentCrimeType = e.target.value || 'all'; });
+
+        document.getElementById('apply-filters')
+            ?.addEventListener('click', () => this._applyFilters());
+
+        document.getElementById('reset-filters')
+            ?.addEventListener('click', () => this._resetFilters());
+
+        const analyzeBtn = document.getElementById('analyze-btn');
+        if (analyzeBtn) {
+            analyzeBtn.disabled = true;
+            analyzeBtn.setAttribute('aria-disabled', 'true');
+            analyzeBtn.addEventListener('click', e => { e.preventDefault(); e.stopImmediatePropagation(); });
+        }
+
+        document.getElementById('send-message')
+            ?.addEventListener('click', () => this.sendChatMessage());
+
+        document.getElementById('chat-input')
+            ?.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.sendChatMessage(); }
+            });
+
+        document.getElementById('toggle-chat')
+            ?.addEventListener('click', () => this.toggleChatbot());
+    },
+
+    _applyFilters() {
+        this.startYear  = parseInt(document.getElementById('start_year')?.value  || 2024, 10);
+        this.startMonth = parseInt(document.getElementById('start_month')?.value || 1,    10);
+        this.endYear    = parseInt(document.getElementById('end_year')?.value    || 2024, 10);
+        this.endMonth   = parseInt(document.getElementById('end_month')?.value   || 12,   10);
+
+        if (this.startYear * 12 + this.startMonth > this.endYear * 12 + this.endMonth) {
+            this.endYear = this.startYear; this.endMonth = this.startMonth;
+            const eSel = document.getElementById('end_year');
+            const mSel = document.getElementById('end_month');
+            if (eSel) eSel.value = this.endYear;
+            if (mSel) mSel.value = this.endMonth;
+        }
+
+        this.currentCrimeType = document.getElementById('crime-type-select')?.value || 'all';
+        this.currentLocation  = document.getElementById('location-select')?.value  || 'all';
+        this.currentYear      = String(this.startYear);
+        this.updateVisualization();
+        GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
+    },
+
+    _resetFilters() {
+        this.startYear = 2024; this.startMonth = 1;
+        this.endYear   = 2024; this.endMonth   = 12;
+        this.currentYear = '2024'; this.currentCrimeType = 'all'; this.currentLocation = 'all';
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        set('start_year',2024); set('start_month',1); set('end_year',2024); set('end_month',12);
+        set('location-select','all'); set('crime-type-select','all');
+        if (window.__choices_crime_type) {
+            try { window.__choices_crime_type.setChoiceByValue('all'); } catch(e) {}
+        }
+        this.updateVisualization();
+        GeminiAI.updateContext(this.currentYear, this.currentCrimeType, this.currentLocation);
+    },
+
     updateVisualization() {
-        console.log(`Updating visualization for ${this.currentYear}, crime type: ${this.currentCrimeType}, location: ${this.currentLocation} (serverMode=${this.serverMode})`);
         if (this.serverMode) {
             HeatmapRenderer.renderServer(this.currentYear, this.currentCrimeType, this.currentLocation);
         } else {
-            HeatmapRenderer.render(this.currentYear, this.currentCrimeType, this.currentLocation);
+            HeatmapRenderer.render(
+                this.currentYear, this.currentCrimeType, this.currentLocation,
+                this.startYear, this.startMonth, this.endYear, this.endMonth
+            );
         }
     },
 
-    /**
-     * Toggle chatbot visibility
-     */
     toggleChatbot() {
-        const chatContainer = document.querySelector('.right-panel.chatbot-container');
-        chatContainer.classList.toggle('minimized');
+        document.querySelector('.right-panel.chatbot-container')?.classList.toggle('minimized');
     },
 
-    enableFloatingChat() {
-        const chat = document.querySelector('.right-panel.chatbot-container');
-        if (!chat.classList.contains('floating')) {
-            // Preserve current position by anchoring to viewport
-            const rect = chat.getBoundingClientRect();
-            chat.style.left = rect.left + 'px';
-            chat.style.top = rect.top + 'px';
-            chat.style.right = 'auto';
-            chat.style.bottom = 'auto';
-            chat.classList.add('floating');
-        }
-        // toggle buttons
-        document.getElementById('chat-undock').style.display = 'none';
-        document.getElementById('chat-dock').style.display = '';
-    },
-
-    disableFloatingChat() {
-        const chat = document.querySelector('.right-panel.chatbot-container');
-        chat.classList.remove('floating', 'dragging');
-        // clear inline positioning so it snaps back to grid column
-        chat.style.left = '';
-        chat.style.top = '';
-        chat.style.right = '';
-        chat.style.bottom = '';
-        document.getElementById('chat-undock').style.display = '';
-        document.getElementById('chat-dock').style.display = 'none';
-    },
-
-    toggleMinimizeChat() {
-        const chat = document.querySelector('.right-panel.chatbot-container');
-        chat.classList.toggle('minimized');
-    },
-
-    /**
-     * Make the chat draggable when floating, using the header as handle
-     */
-    initDraggableChat() {
-        const chat = document.querySelector('.right-panel.chatbot-container');
-        const handle = chat.querySelector('.chatbot-header');
-        let isDown = false;
-        let startX = 0, startY = 0, startLeft = 0, startTop = 0;
-
-        const onMouseDown = (e) => {
-            if (!chat.classList.contains('floating')) return; // only draggable when floating
-            isDown = true;
-            chat.classList.add('dragging');
-            const rect = chat.getBoundingClientRect();
-            startLeft = rect.left;
-            startTop = rect.top;
-            startX = e.clientX;
-            startY = e.clientY;
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-        };
-
-        const onMouseMove = (e) => {
-            if (!isDown) return;
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-            chat.style.left = startLeft + dx + 'px';
-            chat.style.top = startTop + dy + 'px';
-        };
-
-        const onMouseUp = () => {
-            isDown = false;
-            chat.classList.remove('dragging');
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
-
-        handle.addEventListener('mousedown', onMouseDown);
-    },
-
-    /**
-     * Send a chat message
-     */
     async sendChatMessage() {
         const chatInput = document.getElementById('chat-input');
-        const sendBtn = document.getElementById('send-message');
-        const chatMessages = document.getElementById('chat-messages');
-        
-        const message = chatInput.value.trim();
+        const sendBtn   = document.getElementById('send-message');
+        const message   = chatInput.value.trim();
         if (!message) return;
-        
-        // Add user message to chat
         this.addChatMessage('user', message);
-        
-        // Clear input
         chatInput.value = '';
-        
-        // Disable send button
         sendBtn.disabled = true;
-        sendBtn.innerHTML = '<span class="loading-spinner"></span> Thinking...';
-        
-        // Add thinking indicator
-        const thinkingId = this.addChatMessage('assistant', '💭 Analyzing data and preparing response...');
-        
+        const thinkingId = this.addChatMessage('assistant', '💭 Analyzing data…');
         try {
-            // Send to Gemini
             const response = await GeminiAI.sendMessage(message);
-            
-            // Remove thinking indicator
-            const thinkingMsg = document.getElementById(thinkingId);
-            if (thinkingMsg) thinkingMsg.remove();
-            
-            // Add assistant response
-            if (response.success) {
-                this.addChatMessage('assistant', response.message);
-            } else {
-                this.addChatMessage('assistant', `⚠️ ${response.message}`);
-            }
-        } catch (error) {
-            // Remove thinking indicator
-            const thinkingMsg = document.getElementById(thinkingId);
-            if (thinkingMsg) thinkingMsg.remove();
-            
-            console.error('Chat error:', error);
+            document.getElementById(thinkingId)?.remove();
+            this.addChatMessage('assistant', response.success ? response.message : `⚠️ ${response.message}`);
+        } catch (err) {
+            document.getElementById(thinkingId)?.remove();
             this.addChatMessage('assistant', '❌ Sorry, I encountered an error. Please try again.');
         } finally {
-            // Re-enable send button
             sendBtn.disabled = false;
-            sendBtn.innerHTML = '<span class="send-icon">➤</span> Send';
-            
-            // Focus back on input
             chatInput.focus();
         }
     },
 
-    /**
-     * Add a message to the chat
-     */
     addChatMessage(role, content) {
         const chatMessages = document.getElementById('chat-messages');
-        const messageDiv = document.createElement('div');
-        const messageId = `msg-${Date.now()}`;
-        
-        messageDiv.id = messageId;
-        messageDiv.className = `chat-message ${role}`;
-        messageDiv.innerHTML = `
-            <div class="message-content">
-                ${this.formatChatMessage(content)}
-            </div>
-        `;
-        
-        chatMessages.appendChild(messageDiv);
+        const div = document.createElement('div');
+        const id  = `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        div.id = id; div.className = `chat-message ${role}`;
+        div.innerHTML = `<div class="message-content">${content.split('\n').filter(p=>p.trim()).map(p=>`<p>${p}</p>`).join('')}</div>`;
+        chatMessages.appendChild(div);
         chatMessages.scrollTop = chatMessages.scrollHeight;
-        
-        return messageId;
+        return id;
     },
 
-    /**
-     * Format chat message content
-     */
-    formatChatMessage(content) {
-        // Convert line breaks to paragraphs
-        const paragraphs = content.split('\n').filter(p => p.trim());
-        
-        return paragraphs.map(para => {
-            // Check for list items
-            if (para.trim().startsWith('- ') || para.trim().startsWith('• ')) {
-                return `<p>${para}</p>`;
-            }
-            // Check for numbered lists
-            if (/^\d+\./.test(para.trim())) {
-                return `<p><strong>${para}</strong></p>`;
-            }
-            return `<p>${para}</p>`;
-        }).join('');
-    },
-
-    /**
-     * Populate location filter dropdown
-     */
-    populateLocationFilter() {
-        const locationSelect = document.getElementById('location-select');
-        const neighborhoods = Object.keys(CrimeData.neighborhoodCoordinates).sort();
-        
-        neighborhoods.forEach(name => {
-            const option = document.createElement('option');
-            option.value = name;
-            option.textContent = name;
-            locationSelect.appendChild(option);
-        });
-    },
-
-    /**
-     * Populate the crime-type select using categories present in CrimeData.
-     * This works when running in local/offline mode (CSV parsed client-side).
-     */
-    populateCrimeTypeFilterFromData() {
-        const select = document.getElementById('crime-type-select');
-        if (!select) return;
-
-        // Collect keys from the aggregated data (e.g., theft, break, vehicle, person, etc.)
-        const types = new Set();
-        for (const year in CrimeData.crimeDataByYear) {
-            const yearData = CrimeData.crimeDataByYear[year] || {};
-            for (const neigh in yearData) {
-                const obj = yearData[neigh] || {};
-                Object.keys(obj).forEach(k => types.add(k));
-            }
-        }
-
-        // Convert to sorted array (exclude 'all', and derived fields like hourCounts, topHours, peakTimeOfDay)
-        const ordered = Array.from(types)
-            .filter(t => t && t !== 'all' && t !== 'hourCounts' && t !== 'topHours' && t !== 'peakTimeOfDay')
-            .sort();
-
-        // Map to human-friendly labels (basic mapping)
-        const niceLabel = (key) => {
-            if (key === 'all') return 'All Crime Types';
-            if (key === 'break') return 'Break and Enter';
-            if (key === 'person') return 'Violence / Person';
-            if (key === 'vehicle') return 'Vehicle-related';
-            if (key === 'theft') return 'Theft';
-            if (key === 'commercial') return 'Break & Enter (Commercial)';
-            if (key === 'residential') return 'Break & Enter (Residential)';
-            if (key === 'mischief') return 'Mischief';
-            if (key === 'other') return 'Other';
-            return key.charAt(0).toUpperCase() + key.slice(1);
-        };
-
-
-        // Build choices array (do NOT include a visible 'all' option)
-        const choices = ordered.map(v => ({ value: v, label: niceLabel(v) }));
-
-        // Replace select options (no 'all' option shown)
-        select.innerHTML = '';
-        choices.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.value;
-            opt.textContent = c.label;
-            select.appendChild(opt);
-        });
-
-        // If Choices.js was initialized, update it
-        try {
-            if (window.__choices_crime_type && typeof window.__choices_crime_type.setChoices === 'function') {
-                // setChoices expects an array of objects
-                window.__choices_crime_type.setChoices(choices, 'value', 'label', true);
-            }
-        } catch (e) {
-            console.warn('Failed to update Choices.js for crime-type-select', e);
-        }
-
-        // Keep the current selection if present and ensure UI + app state are in sync.
-        try {
-            const desired = this.currentCrimeType || 'all';
-            // If the currentCrimeType corresponds to a real option, preselect it. Otherwise, leave nothing selected
-            Array.from(select.options).forEach(opt => {
-                opt.selected = (opt.value === desired);
-            });
-
-            // If Choices.js is present, try to set its active choice(s) as well.
-            try {
-                if (window.__choices_crime_type && typeof window.__choices_crime_type.setChoiceByValue === 'function') {
-                    // Only set if desired matches an actual option (Choices will ignore unknown values)
-                    window.__choices_crime_type.setChoiceByValue(desired);
-                } else if (window.__choices_crime_type && typeof window.__choices_crime_type.setValue === 'function') {
-                    window.__choices_crime_type.setValue(true, [{ value: desired, label: desired }]);
-                }
-            } catch (innerErr) {
-                // Not critical — continue
-            }
-
-            // If nothing is selected, we intentionally do NOT dispatch a change event here.
-            // The app's logic treats an empty selection as 'all' (see getSelectedCrimeType()),
-            // so leaving no selection visually hides the 'All Crime Types' option while preserving default behavior.
-        } catch (e) {
-            console.warn('Failed to set default crime-type selection', e);
-        }
-    },
-
-    /**
-     * Generate a quick analysis for the current view
-     */
-    async generateQuickAnalysis() {
-        const analyzeBtn = document.getElementById('analyze-btn');
-        const originalText = analyzeBtn.innerHTML;
-        
-        analyzeBtn.disabled = true;
-        analyzeBtn.innerHTML = '<span class="loading-spinner"></span> Analyzing...';
-        
-        const analysisResult = await GeminiAI.generateAnalysis(this.currentYear, this.currentCrimeType, this.currentLocation);
-        
-        // Display in chatbot
-        GeminiAI.displayAnalysis(analysisResult);
-        
-        // Restore button
-        analyzeBtn.disabled = false;
-        analyzeBtn.innerHTML = originalText;
-    },
-
-    initChatResizer() {
-        const app = document.querySelector('.app-container');
-        const resizer = document.getElementById('chat-resizer');
-        const chat = document.querySelector('.right-panel.chatbot-container');
-
-        if (!resizer || !app || !chat) return;
-
-        // restore saved width
-        const saved = localStorage.getItem('chatWidthPx');
-        if (saved) document.documentElement.style.setProperty('--chat-width', saved);
-
-        let dragging = false;
-        const MIN = 0;        // px — drag to 0 to hide
-        const MAX = 640;      // px — cap maximum width
-        const HIDE_THRESHOLD = 24; // px — snap to hidden when near 0
-
-        const setWidth = (px) => {
-            let w = Math.min(Math.max(px, MIN), MAX);
-            if (w <= HIDE_THRESHOLD) {
-            app.classList.add('chat-hidden');
-            w = 0;
-            } else {
-            app.classList.remove('chat-hidden');
-            }
-            const val = `${w}px`;
-            document.documentElement.style.setProperty('--chat-width', val);
-            localStorage.setItem('chatWidthPx', val);
-        };
-
-        const onMove = (clientX) => {
-            const rect = app.getBoundingClientRect();
-            const total = rect.width;
-            // grid columns: [left=300] [gap=1rem] [main=flex] [gap=1rem] [splitter=6] [gap=?] [chat=var]
-            // We compute chat width from the right edge of the container.
-            const fromRight = rect.right - clientX;
-            setWidth(fromRight - 8); // small fudge for grid gaps
-        };
-
-        const onMouseMove = (e) => { if (dragging) onMove(e.clientX); };
-        const onTouchMove = (e) => { if (!dragging) return; const t = e.touches[0]; onMove(t.clientX); };
-
-        resizer.addEventListener('mousedown', (e) => {
-            dragging = true;
-            app.classList.add('resizing');
-            e.preventDefault();
-        });
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', () => {
-            dragging = false;
-            app.classList.remove('resizing');
-        });
-
-        resizer.addEventListener('touchstart', (e) => {
-            dragging = true;
-            app.classList.add('resizing');
-        }, { passive: true });
-        document.addEventListener('touchmove', onTouchMove, { passive: true });
-        document.addEventListener('touchend', () => {
-            dragging = false;
-            app.classList.remove('resizing');
-        });
-
-        // Double-click to reset to default
-        resizer.addEventListener('dblclick', () => setWidth(350));
-        },
-
-
-    
-    /**
-     * Setup bus route UI and handlers
-     */
-    setupBusRouteUI() {
-        // Create UI panel inside left-panel filters-nav
-        const filtersNav = document.querySelector('.filters-nav');
-        if (!filtersNav) return;
-
-        const container = document.createElement('div');
-        container.className = 'filter-group';
-        container.innerHTML = `
-            <h3>Bus Route Planner</h3>
-            <label for="route-start-loc">Start</label>
-            <select id="route-start-loc" style="width:100%; padding:6px; margin-bottom:6px;"></select>
-            <label for="route-dest-loc">Destination</label>
-            <select id="route-dest-loc" style="width:100%; padding:6px; margin-bottom:6px;"></select>
-            <label>Start hour</label>
-            <input id="route-start-hour" type="number" min="0" max="23" placeholder="7" style="width:100%; padding:6px; margin-bottom:6px;" />
-            <label>End hour</label>
-            <input id="route-end-hour" type="number" min="0" max="23" placeholder="9" style="width:100%; padding:6px; margin-bottom:6px;" />
-            <button id="compute-route" class="primary-btn">Compute Route Risk</button>
-            <div id="route-results" style="margin-top:8px;color:var(--secondary-text);"></div>
-        `;
-
-        filtersNav.appendChild(container);
-
-        // Populate start and destination dropdowns with neighborhood names
-        const startSelect = document.getElementById('route-start-loc');
-        const destSelect = document.getElementById('route-dest-loc');
-        const neighborhoods = Object.keys(CrimeData.neighborhoodCoordinates).sort();
-
-        neighborhoods.forEach(name => {
-            const option1 = document.createElement('option');
-            option1.value = name;
-            option1.textContent = name;
-            startSelect.appendChild(option1);
-
-            const option2 = document.createElement('option');
-            option2.value = name;
-            option2.textContent = name;
-            destSelect.appendChild(option2);
-        });
-
-        // Set default selections
-        if (neighborhoods.length > 1) {
-            startSelect.value = neighborhoods[0];
-            destSelect.value = neighborhoods[1];
-        }
-
-        document.getElementById('compute-route').addEventListener('click', async () => {
-            const startVal = document.getElementById('route-start-loc').value;
-            const destVal = document.getElementById('route-dest-loc').value;
-            const sh = parseInt(document.getElementById('route-start-hour').value,10);
-            const eh = parseInt(document.getElementById('route-end-hour').value,10);
-            
-            const startCoords = CrimeData.neighborhoodCoordinates[startVal];
-            const destCoords = CrimeData.neighborhoodCoordinates[destVal];
-
-            if (!startCoords || !destCoords) {
-                document.getElementById('route-results').textContent = 'Please select valid start and destination locations.';
-                return;
-            }
-
-            const start = { lat: startCoords[0], lng: startCoords[1] };
-            const dest = { lat: destCoords[0], lng: destCoords[1] };
-
-            document.getElementById('route-results').textContent = 'Computing...';
-            const res = await RoutePlanner.planRoute(start, dest, { year: this.currentYear, crimeType: this.currentCrimeType, startHour: Number.isFinite(sh)?sh:null, endHour: Number.isFinite(eh)?eh:null });
-
-            const resultsDiv = document.getElementById('route-results');
-            resultsDiv.innerHTML = `
-                <div>Total incidents along route: <strong>${res.total}</strong></div>
-                <div>Risk score: <strong>${res.score}</strong></div>
-                <div>Worst areas on route: ${res.worst.map(w=> `${w.name} (${w.count})`).join(', ')}</div>
-            `;
-
-            if (res.alternatives && res.alternatives.length) {
-                resultsDiv.innerHTML += `<div style="margin-top:8px;">Alternative suggestion: go via waypoint at (${res.alternatives[0].waypoint.lat.toFixed(4)}, ${res.alternatives[0].waypoint.lng.toFixed(4)}) — expected incidents: ${res.alternatives[0].total}</div>`;
-            }
-        });
-    },
+    async generateQuickAnalysis() { /* AI disabled */ }
 };
 
-// Initialize the application after the DOM is fully loaded
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('DOM fully loaded and parsed');
-    
-    // Show loading overlay if it exists
-    const loadingOverlay = document.getElementById('loading-overlay');
-    if (loadingOverlay) loadingOverlay.style.display = 'flex';
-
-    try {
-        // Initialize the main application
-        await ObserveVanApp.init();
-    } catch (error) {
-        console.error('Failed to initialize the application:', error);
-        // Optionally, show an error message to the user in the UI
-    } finally {
-        // Hide loading overlay
-        if (loadingOverlay) loadingOverlay.style.display = 'none';
-    }
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.style.display = 'flex';
+    try { await ObserveVanApp.init(); }
+    catch (err) { console.error('Failed to initialize:', err); }
+    finally { if (overlay) overlay.style.display = 'none'; }
 });
