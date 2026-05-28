@@ -1,152 +1,210 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ObserveVan - Vancouver Crime Insights</title>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-     crossorigin=""/>
-     
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="styles.css">
-
-    <!-- MarkerCluster CSS (from feature-luna) -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-
-    <!-- Choices.js CSS (for enhanced multi-selects) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ObserveVan — Vancouver Crime Map</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- MarkerCluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <!-- PapaParse -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <!-- Choices.js -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+  <!-- App styles -->
+  <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Left Panel: Filters -->
-        <aside class="left-panel">
-            <header class="app-header">
-                <h1>ObserveVan</h1>
-                <p>Vancouver Crime Insights</p>
-            </header>
-            <nav class="filters-nav">
-                <h2>Filters</h2>
 
-                <!-- Date range controls (month / year) -->
-                <label for="start_month">Date from (month / year)</label>
-                <div class="filter-row" style="display:flex; gap:8px;">
-                    <select id="start_month"></select>
-                    <select id="start_year"></select>
-                </div>
+<!-- Mobile header -->
+<header class="mobile-header">
+  <button id="open-filters-btn" class="icon-btn" aria-label="Open filters">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+  <span class="app-title">ObserveVan</span>
+  <button id="open-chat-btn" class="icon-btn" aria-label="Open chat">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  </button>
+</header>
 
-                <label for="end_month">Date to (month / year)</label>
-                <div class="filter-row" style="display:flex; gap:8px;">
-                    <select id="end_month"></select>
-                    <select id="end_year"></select>
-                </div>
+<div class="panel-overlay" id="panel-overlay"></div>
 
-                <!-- Keep single-year selector for backward compatibility with existing logic -->
-                <div class="filter-group">
-                    <label for="year-select">Year</label>
-                    <select id="year-select">
-                        <option value="2025">2025</option>
-                        <option value="2024">2024</option>
-                        <option value="2023">2023</option>
-                        <option value="2022">2022</option>
-                        <option value="2021">2021</option>
-                        <option value="2020">2020</option>
-                    </select>
-                </div>
+<!-- Main 3-column layout -->
+<div class="app-container">
 
-                <!-- Multi-select crime types (Choices.js will enhance this when available) -->
-                <label for="crime-type-select">Crime type</label>
-                <select id="crime-type-select" multiple size="6"></select>
+  <!-- LEFT PANEL — filters -->
+  <aside class="left-panel" id="left-panel">
+    <div class="panel-header">
+      <h1 class="panel-title">ObserveVan</h1>
+      <button class="close-panel-btn" id="close-left-btn" aria-label="Close">✕</button>
+    </div>
+    <p class="panel-subtitle">Vancouver Crime Heatmap</p>
 
-                <label for="location-select">Neighbourhood</label>
-                <select id="location-select"><option value="all">All Vancouver</option></select>
-
-                <div style="display:flex; gap:8px; margin-top:12px;">
-                    <button id="apply-filters">Apply</button>
-                    <button id="reset-filters">Reset</button>
-                </div>
-
-                <div style="margin-top:12px;">
-                    <a href="/crime_map.html" target="_blank">Open simple map (static)</a>
-                </div>
-
-                <hr />
-
-                <div id="legend">
-                    <h4>Legend</h4>
-                    <div><span class="dot" style="background:#2b83ba"></span> Low count</div>
-                    <div><span class="dot" style="background:#ffffbf"></span> Medium</div>
-                    <div><span class="dot" style="background:#fdae61"></span> High</div>
-                    <div><span class="dot" style="background:#d7191c"></span> Very high</div>
-                </div>
-            </nav>
-            <footer class="app-footer">
-                <button id="analyze-btn" class="primary-btn">
-                    🤖 Generate AI Analysis
-                </button>
-            </footer>
-        </aside>
-
-        <!-- Main Content: Map and Stats -->
-        <main class="main-content">
-            <div id="map"></div>
-            <div id="stats-grid"></div>
-        </main>
-
-        <!-- Right Panel: Chatbot -->
-        <aside class="right-panel chatbot-container">
-            <button id="toggle-chat" class="chat-toggle-btn">💬</button>
-            <div class="chatbot-header">
-                <h2>AI Assistant</h2>
-            </div>
-            <div id="chat-messages" class="chat-messages">
-                <div class="chat-message assistant">
-                    <div class="message-content">
-                        <p>Welcome! Ask me about crime rates, neighborhood safety, or safe routes.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="chat-input-area">
-                <textarea id="chat-input" placeholder="Ask a question..."></textarea>
-                <button id="send-message" class="send-btn">➤</button>
-            </div>
-        </aside>
+    <div class="filter-section">
+      <h3 class="section-title">Date Range</h3>
+      <div class="date-row">
+        <label>From</label>
+        <div class="date-selects">
+          <select id="start_month" class="select-sm">
+            <option value="1">Jan</option><option value="2">Feb</option>
+            <option value="3">Mar</option><option value="4">Apr</option>
+            <option value="5">May</option><option value="6">Jun</option>
+            <option value="7">Jul</option><option value="8">Aug</option>
+            <option value="9">Sep</option><option value="10">Oct</option>
+            <option value="11">Nov</option><option value="12">Dec</option>
+          </select>
+          <select id="start_year" class="select-sm">
+            <option value="2020">2020</option><option value="2021">2021</option>
+            <option value="2022">2022</option><option value="2023">2023</option>
+            <option value="2024" selected>2024</option><option value="2025">2025</option>
+          </select>
+        </div>
+      </div>
+      <div class="date-row">
+        <label>To</label>
+        <div class="date-selects">
+          <select id="end_month" class="select-sm">
+            <option value="1">Jan</option><option value="2">Feb</option>
+            <option value="3">Mar</option><option value="4">Apr</option>
+            <option value="5">May</option><option value="6">Jun</option>
+            <option value="7">Jul</option><option value="8">Aug</option>
+            <option value="9">Sep</option><option value="10">Oct</option>
+            <option value="11">Nov</option><option value="12" selected>Dec</option>
+          </select>
+          <select id="end_year" class="select-sm">
+            <option value="2020">2020</option><option value="2021">2021</option>
+            <option value="2022">2022</option><option value="2023">2023</option>
+            <option value="2024" selected>2024</option><option value="2025">2025</option>
+          </select>
+        </div>
+      </div>
     </div>
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-     crossorigin=""></script>
-     
-    <!-- Papa Parse for CSV reading -->
-    <script src="https://unpkg.com/papaparse@5.3.2/papaparse.min.js"></script>
+    <!-- Hidden legacy year select (kept for compat) -->
+    <div id="year-select-group" style="display:none">
+      <select id="year-select"></select>
+    </div>
 
-    <!-- MarkerCluster and Choices.js scripts -->
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+    <div class="filter-section">
+      <h3 class="section-title">Crime Type</h3>
+      <select id="crime-type-select">
+        <option value="all">All Types</option>
+      </select>
+    </div>
 
-    <!-- Small initializer for Choices.js to enhance the crime-type select -->
-    <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        try {
-            const el = document.getElementById('crime-type-select');
-            if (el && window.Choices) {
-                // eslint-disable-next-line no-unused-vars
-                window.__choices_crime_type = new Choices(el, { removeItemButton: true, shouldSort: false });
-            }
-        } catch (e) { console.warn('Choices init failed', e); }
-    });
-    </script>
+    <div class="filter-section">
+      <h3 class="section-title">Location</h3>
+      <select id="location-select">
+        <option value="all">All Vancouver</option>
+      </select>
+    </div>
 
-    <!-- App Scripts -->
-    <script src="config.js"></script>
-    <script src="data.js"></script>
-    <script src="heatmap.js"></script>
-    <script src="gemini.js"></script>
-    <script src="routePlanner.js"></script>
-    <script src="app.js"></script>
+    <div class="filter-actions">
+      <button id="apply-filters" class="primary-btn">Apply Filters</button>
+      <button id="reset-filters" class="secondary-btn">Reset</button>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend-section">
+      <h3 class="section-title">Incident Intensity</h3>
+      <div class="heat-legend">
+        <div class="heat-gradient"></div>
+        <div class="heat-labels"><span>Low</span><span>Medium</span><span>High</span></div>
+      </div>
+      <div class="legend-types">
+        <div class="legend-item"><span class="dot" style="background:#e74c3c"></span>Theft / B&amp;E</div>
+        <div class="legend-item"><span class="dot" style="background:#f39c12"></span>Vehicle</div>
+        <div class="legend-item"><span class="dot" style="background:#9b59b6"></span>Person</div>
+        <div class="legend-item"><span class="dot" style="background:#3498db"></span>Mischief</div>
+      </div>
+    </div>
+
+    <!-- AI Assistant -->
+    <div class="ai-section">
+      <button id="toggle-chatbot" class="primary-btn ai-btn" disabled aria-disabled="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+        </svg>
+        AI Assistant
+      </button>
+      <p class="api-unavailable-note">⚠ AI features require a valid Gemini API key. Configure in config.js.</p>
+    </div>
+  </aside>
+
+  <!-- MAIN — map + stats -->
+  <main class="main-content">
+    <div id="map"></div>
+    <div id="stats-grid"></div>
+  </main>
+
+  <!-- RIGHT PANEL — chatbot -->
+  <aside class="right-panel chatbot-container" id="right-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">AI Assistant</h2>
+      <button class="close-panel-btn" id="close-right-btn" aria-label="Close">✕</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-message bot-message">
+        <div class="message-content">
+          Hello! I'm your AI crime analysis assistant. Ask me about crime trends in Vancouver neighbourhoods.
+        </div>
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="chat-input" placeholder="Ask about crime data..." disabled/>
+      <button id="send-message" class="primary-btn" disabled>Send</button>
+    </div>
+  </aside>
+</div>
+
+<!-- Loading overlay -->
+<div id="loading-overlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <p>Loading crime data…</p>
+</div>
+
+<!-- App scripts -->
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="heatmap.js"></script>
+<script src="gemini.js"></script>
+<script src="app.js"></script>
+
+<script>
+(function(){
+  const overlay = document.getElementById('panel-overlay');
+  const leftPanel = document.getElementById('left-panel');
+  const rightPanel = document.getElementById('right-panel');
+
+  function openPanel(panel) {
+    panel.classList.add('open');
+    overlay.classList.add('visible');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeAll() {
+    leftPanel.classList.remove('open');
+    rightPanel.classList.remove('open');
+    overlay.classList.remove('visible');
+    document.body.style.overflow = '';
+  }
+  document.getElementById('open-filters-btn').addEventListener('click', () => openPanel(leftPanel));
+  document.getElementById('open-chat-btn').addEventListener('click', () => openPanel(rightPanel));
+  document.getElementById('close-left-btn').addEventListener('click', closeAll);
+  document.getElementById('close-right-btn').addEventListener('click', closeAll);
+  overlay.addEventListener('click', closeAll);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
+})();
+</script>
 </body>
 </html>
